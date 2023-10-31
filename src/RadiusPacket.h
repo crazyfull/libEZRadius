@@ -62,6 +62,8 @@ class RadiusPacket
 public:
 
     /// Constructor
+    RadiusPacket(const char* Data, int DataLength, unsigned char p_code = 0);
+
     /**
      * This constructor should be used for constructing RADIUS 
      * requests (i.e. by RADIUS client application). It 
@@ -331,7 +333,7 @@ private:
 
 
     /// Raw packet data
-    unsigned char m_data[D_RAW_DATA_LENGTH];
+    unsigned char m_data[D_RAW_DATA_LENGTH+1];
 
 
     /// RADIUS secret associated with this packet

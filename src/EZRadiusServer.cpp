@@ -31,6 +31,11 @@ uint16_t EZRadiusServer::AccountingPort() const
     return m_AccPort;
 }
 
+RadiusSecret *EZRadiusServer::Secret()
+{
+    return &m_secret;
+}
+
 void EZRadiusServer::setSecret(const char *secret)
 {
     m_secret.setSecret(secret, strlen(secret));
@@ -55,9 +60,11 @@ void EZRadiusServer::Start()
     if(!m_pUDPServer){
         m_pUDPServer = new clsUDPServer;
 
-        m_pUDPServer->AddNewListener(m_AccPort, nullptr, this, onReceiveUDPData);
+        m_pUDPServer->AddNewListener(m_AuthPort, nullptr, this, onReceiveUDPData);
         if(m_AccPort != m_AuthPort)
-            m_pUDPServer->AddNewListener(m_AuthPort, nullptr, this, onReceiveUDPData);
+            m_pUDPServer->AddNewListener(m_AccPort, nullptr, this, onReceiveUDPData);
+
+        m_pUDPServer->Start();
     }
 
     //m_request.getRawData()
@@ -67,8 +74,10 @@ void EZRadiusServer::onReceiveUDPData(clsUDPListener* pListener, void*p, clsUDPS
 {
     EZRadiusServer *pThis = static_cast<EZRadiusServer*>(p);
 
-    RadiusPacket l_request ;
+    RadiusPacket request(Data, DataLength) ;
+    request.setSecret(pThis->Secret());
+    request.dump();
 
 
-    LOG_COLOR(White, "OnReceiveUDPPackets[%s]\n", Data , UDPClient.getIPAddress());
+    LOG_COLOR(Black, "OnReceiveUDPPackets[%d][%s]\n", DataLength , UDPClient.getIPAddress());
 }

@@ -6,13 +6,13 @@
  */
 
 #ifdef HAVE_CONFIG_H
-    #include "config.h"
+#include "config.h"
 #endif
 
 #ifndef _MSC_VER
-    #include <unistd.h>
-    #include <sys/time.h>
-    #include <arpa/inet.h>
+#include <unistd.h>
+#include <sys/time.h>
+#include <arpa/inet.h>
 #endif
 #include <string.h>
 #include <stdio.h>
@@ -28,21 +28,21 @@
 
 // the following table must be synchronized with definition of Packet Codes in RadiusPacket.h file
 static const char *PacketCodeDescription[] =
-{
-    "unknown",                  // 0
-    "Access-Request",           // 1
-    "Access-Accept",            // 2
-    "Access-Reject",            // 3
-    "Accounting-Request",       // 4
-    "Accounting-Response",      // 5
-    "Accounting-Status",        // 6
-    "Password-Request",         // 7
-    "Password-Ack",             // 8
-    "Password-Reject",          // 9
-    "Accounting-Message",       // 10
-    "Access-Challenge",         // 11
-    "Status-Server",            // 12
-    "Status-Client",            // 13
+    {
+        "unknown",                  // 0
+        "Access-Request",           // 1
+        "Access-Accept",            // 2
+        "Access-Reject",            // 3
+        "Accounting-Request",       // 4
+        "Accounting-Response",      // 5
+        "Accounting-Status",        // 6
+        "Password-Request",         // 7
+        "Password-Ack",             // 8
+        "Password-Reject",          // 9
+        "Accounting-Message",       // 10
+        "Access-Challenge",         // 11
+        "Status-Server",            // 12
+        "Status-Client",            // 13
 };
 
 
@@ -59,6 +59,14 @@ RadiusPacket::RadiusPacket(unsigned char p_code)
 // ---------------------------
 // Constructor
 // ---------------------------
+RadiusPacket::RadiusPacket(const char *Data, int DataLength, unsigned char p_code)
+{
+    if(D_RADIUS_PACKET_MAX_LENGTH > DataLength ){
+        memset(m_data, 0, sizeof(m_data));
+        memcpy(m_data, Data, DataLength);
+    }
+}
+
 RadiusPacket::RadiusPacket(unsigned char p_code, RadiusClientStack & p_stack)
 {
     init(p_code);
@@ -353,7 +361,7 @@ int RadiusPacket::getFirstAttribute(RadiusAttribute & p_attr)
 int RadiusPacket::getNextAttribute(RadiusAttribute & p_attr)
 {
     unsigned int l_offset = p_attr.getOffset(),
-                 l_length = p_attr.getLength();
+        l_length = p_attr.getLength();
     
     if ((l_length == 0) || 
         (l_offset + l_length >= getLength()))
@@ -451,7 +459,7 @@ void RadiusPacket::responseAuthenticator(RadiusSecret * p_secret)
         p_secret->getSecret(l_secret, l_secretLength);
     else
         m_secret->getSecret(l_secret, l_secretLength);
-        
+
     memcpy(m_data + getLength(), l_secret, l_secretLength);
 
     unsigned char l_authenticator[D_AUTHENTICATOR_LENGTH];

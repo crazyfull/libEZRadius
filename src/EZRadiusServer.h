@@ -34,6 +34,7 @@ public:
     void Start();
     uint16_t AuthenticatorPort() const;
     uint16_t AccountingPort() const;
+    RadiusSecret *Secret();
 
 };
 
