@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.5)
 
 project(libEZRadius
-    VERSION 1.1.1
+    VERSION 1.1.5
     DESCRIPTION "radius Library"
     LANGUAGES CXX)
 
