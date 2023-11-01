@@ -44,6 +44,22 @@
 #define D_RAW_DATA_LENGTH           4352
 
 
+struct AttrValue
+{
+    const char *strValue = nullptr;
+    uint16_t strValueLen = 0;
+    uint32_t intValue = 0;
+};
+
+enum AttrValueTypes{
+    ATTR_TYPE_INTEGER = 1,
+    ATTR_TYPE_IP_ADDRESS = 2,
+    ATTR_TYPE_PASSWORD = 3,
+    ATTR_TYPE_CHAP_PASSWORD = 4,
+    ATTR_TYPE_VENDOR_SPECIFIC = 5,
+    ATTR_TYPE_FORMAT_STRING = 6
+};
+
 class RadiusSecret;
 class RadiusClientStack;
 
@@ -116,7 +132,8 @@ public:
     unsigned char getCode(void);
 
     /// Get packet code description
-    const char * getCodeDescription(void);
+    const char *getCodeDescription(void);
+    const char *getCodeDescription(unsigned char l_code);
 
     
     /// Get packet length
@@ -222,6 +239,7 @@ public:
      * @return RC_SUCCESS or RC_FAIL
      */
     int findAttribute(unsigned char p_attrType, RadiusAttribute & p_attr);
+    AttrValue getAttribute(uint8_t attrType);
 
 
     /// Add new attribute to the packet
@@ -300,6 +318,8 @@ public:
     /// Verify RADIUS response
     bool verifyResponse(RadiusPacket & p_packet);
 
+
+    AttrValueTypes getAttributeType(uint8_t attrType);
 private:
 
     friend class RadiusAttribute;

@@ -233,14 +233,18 @@ void RadiusAttribute::dump(AttributeFormat_e p_format)
     }
 
     // then print data in HEX format
-    uint32_t l_length = getLength() - 2;
+/**/
+    uint8_t l_length = getLength() ;
+    if(l_length > 2 )
+        l_length -= 2;
     unsigned char * l_data = getRawData();
 
     printf("( ");
-    for (uint32_t i=0; i<l_length; i++)
+    for (uint32_t i=0; i < l_length; i++)
     {
         printf("%02x ", l_data[i]);
     }
+
     printf(")\n");
 }
 
@@ -363,7 +367,7 @@ const char * RadiusAttribute::getTypeDescription(void)
 // ---------------------------
 // get attribute's length
 // ---------------------------
-unsigned char RadiusAttribute::getLength(void)
+uint8_t RadiusAttribute::getLength(void)
 {
     if (!isValid())
         return 0;
@@ -377,7 +381,7 @@ unsigned char RadiusAttribute::getLength(void)
     // |     Type      |    Length     |  Value ...
     // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-
 
-    unsigned char * l_data = m_packet->getRawData() + m_offset + 1;
+    uint8_t * l_data = m_packet->getRawData() + m_offset + 1;
     return *l_data;
 }
 
@@ -401,7 +405,7 @@ int RadiusAttribute::setLength(unsigned char p_length)
 // ---------------------------
 int RadiusAttribute::isValid(void)
 {
-    return (m_offset >= D_RADIUS_PACKET_HEADER_LENGTH);
+    return (m_offset+1 >= D_RADIUS_PACKET_HEADER_LENGTH);
 }
 
 
@@ -444,7 +448,7 @@ uint32_t RadiusAttribute::getNumber(void)
 {
     if (!isValid())
         return 0;
-    
+
     uint32_t l_value;
     memcpy(&l_value, getRawData(), sizeof(uint32_t));
     return ntohl(l_value);
@@ -529,7 +533,9 @@ int RadiusAttribute::getString(const char * & p_data, uint16_t & p_length)
         return RC_FAIL;
     
     p_data = (const char *)getRawData();
-    p_length = getLength() - 2;
+    p_length = getLength() ;
+    if(p_length > 2 )
+        p_length -= 2;
 
     return RC_SUCCESS;
 }
@@ -622,7 +628,9 @@ int RadiusAttribute::getVendorRawString(const char * & p_data, uint16_t & p_leng
         return RC_FAIL;
     
     p_data = (const char *)getRawData() + 4;
-    p_length = getLength() - 6;
+    p_length = getLength() ;
+    if(p_length > 6 )
+        p_length -= 6;
 
     return RC_SUCCESS;
 }
@@ -825,7 +833,9 @@ int RadiusAttribute::getUserPassword(char * p_data, uint16_t & p_length, RadiusS
     unsigned char *l_data = getRawData();
 
     // length of the password attribute
-    p_length = getLength() - 2;
+    p_length = getLength() ;
+    if(p_length > 2 )
+        p_length -= 2;
 
     int i;
     uint16_t l_chunkOffset;
@@ -1068,7 +1078,9 @@ int RadiusAttribute::getOldPassword(char * p_data, uint16_t & p_length, RadiusSe
     unsigned char *l_data = getRawData();
 
     // length of the password attribute
-    p_length = getLength() - 2;
+    p_length = getLength() ;
+    if(p_length > 2 )
+        p_length -= 2;
 
     int i;
     uint16_t l_chunkOffset;
@@ -1190,7 +1202,9 @@ int RadiusAttribute::getChapString(const char *&p_data, uint16_t & p_length)
         return RC_FAIL;
     
     p_data = (const char *)getRawData() + 1;
-    p_length = getLength() - 3;
+    p_length = getLength() ;
+    if(p_length > 3 )
+        p_length -= 3;
 
     return RC_SUCCESS;
 }
@@ -1349,7 +1363,9 @@ int RadiusAttribute::getVendorString(const char * & p_data, uint16_t & p_length)
         return RC_FAIL;
     
     p_data = (const char *)getRawData() + 6;
-    p_length = getLength() - 8;
+    p_length = getLength() ;
+    if(p_length > 8 )
+        p_length -= 8;
 
     return RC_SUCCESS;
 }

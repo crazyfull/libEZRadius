@@ -30,12 +30,14 @@ public:
     void setSecret(const char* secret);
     void setAuthenticationPort(uint16_t newAuthenticationPort);
     void setAccountingPort(uint16_t newAccountingPort);
+
     //void on
     void Start();
     uint16_t AuthenticatorPort() const;
     uint16_t AccountingPort() const;
     RadiusSecret *Secret();
 
+    void onReceiveRequest(PacketTypeCodes PacketType, RadiusPacket &pRequest, clsUDPSocket &UDPClient);
 };
 
 #endif // EZRADIUSSERVER_H

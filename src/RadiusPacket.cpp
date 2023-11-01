@@ -162,6 +162,13 @@ const char * RadiusPacket::getCodeDescription(void)
         return PacketCodeDescription[l_code];
 }
 
+const char * RadiusPacket::getCodeDescription(unsigned char l_code )
+{
+    if (l_code > D_PACKET_MAX_KNOWN_CODE)
+        return PacketCodeDescription[0];
+    else
+        return PacketCodeDescription[l_code];
+}
 
 
 // ---------------------------
@@ -363,8 +370,7 @@ int RadiusPacket::getNextAttribute(RadiusAttribute & p_attr)
     unsigned int l_offset = p_attr.getOffset(),
         l_length = p_attr.getLength();
     
-    if ((l_length == 0) || 
-        (l_offset + l_length >= getLength()))
+    if ((l_length == 0) || (l_offset + l_length >= getLength()))
     {
         p_attr.init(this, 0);
         return RC_FAIL;
@@ -387,6 +393,89 @@ int RadiusPacket::findAttribute(unsigned char p_attrType, RadiusAttribute & p_at
     }
     
     return RC_FAIL;
+}
+
+
+
+AttrValueTypes RadiusPacket::getAttributeType(uint8_t attrType){
+
+    switch (attrType)
+    {
+    case D_ATTR_NAS_PORT:
+    case D_ATTR_SERVICE_TYPE:
+    case D_ATTR_FRAMED_PROTOCOL:
+    case D_ATTR_FRAMED_ROUTING:
+    case D_ATTR_FRAMED_MTU:
+    case D_ATTR_FRAMED_COMPRESSION:
+    case D_ATTR_LOGIN_SERVICE:
+    case D_ATTR_LOGIN_TCP_PORT:
+    case D_ATTR_FRAMED_IPX_NETWORK:
+    case D_ATTR_SESSION_TIMEOUT:
+    case D_ATTR_IDLE_TIMEOUT:
+    case D_ATTR_TERMINATION_ACTION:
+    case D_ATTR_FRAMED_APPLETALK_LINK:
+    case D_ATTR_FRAMED_APPLETALK_NETWORK:
+    case D_ATTR_NAS_PORT_TYPE:
+    case D_ATTR_PORT_LIMIT:
+    case D_ATTR_ACCT_STATUS_TYPE:
+    case D_ATTR_ACCT_DELAY_TIME:
+    case D_ATTR_ACCT_INPUT_OCTETS:
+    case D_ATTR_ACCT_OUTPUT_OCTETS:
+    case D_ATTR_ACCT_AUTHENTIC:
+    case D_ATTR_ACCT_SESSION_TIME:
+    case D_ATTR_ACCT_INPUT_PACKETS:
+    case D_ATTR_ACCT_OUTPUT_PACKETS:
+    case D_ATTR_ACCT_TERMINATE_CAUSE:
+    case D_ATTR_ACCT_LINK_COUNT:
+    case D_ATTR_TUNNEL_TYPE:
+    case D_ATTR_TUNNEL_MEDIUM_TYPE:
+    case D_ATTR_ARAP_ZONE_ACCESS:
+    case D_ATTR_ARAP_SECURITY:
+    case D_ATTR_PASSWORD_RETRY:
+    case D_ATTR_PROMPT:
+    case D_ATTR_TUNNEL_PREFERENCE:
+    case D_ATTR_ACCT_INTERIM_INTRAVEL:
+
+        return ATTR_TYPE_INTEGER;
+        break;
+    case D_ATTR_NAS_IP_ADDRESS:
+    case D_ATTR_FRAMED_IP_ADDRESS:
+    case D_ATTR_FRAMED_IP_NETMASK:
+    case D_ATTR_LOGIN_IP_HOST:
+        return ATTR_TYPE_IP_ADDRESS;
+        break;
+    case D_ATTR_USER_PASSWORD:
+        return ATTR_TYPE_PASSWORD;
+        break;
+    case D_ATTR_CHAP_PASSWORD:
+        return ATTR_TYPE_CHAP_PASSWORD;
+        break;
+    case D_ATTR_VENDOR_SPECIFIC:
+        return ATTR_TYPE_VENDOR_SPECIFIC;
+        break;
+    default:
+        return ATTR_TYPE_FORMAT_STRING;
+    }
+    return ATTR_TYPE_FORMAT_STRING;
+}
+
+AttrValue RadiusPacket::getAttribute(uint8_t attrType){
+
+    AttrValue value;
+    RadiusAttribute l_attr;
+    if (findAttribute(attrType, l_attr) == RC_SUCCESS) {
+
+        if(getAttributeType(attrType) == ATTR_TYPE_FORMAT_STRING){
+
+            if (l_attr.getString(value.strValue, value.strValueLen) == RC_SUCCESS) {
+                //ret.append(user, userLen);
+            }
+        }else{
+
+            value.intValue = l_attr.getNumber();
+        }
+    }
+    return value;
 }
 
 

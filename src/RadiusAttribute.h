@@ -129,6 +129,24 @@
 #define D_ACCT_STATUS_OFF               8
 
 
+// RADIUS Packet Type Codes
+typedef enum PacketTypeCodes
+{
+    UNKNOWN = 0,
+    ACCESS_REQUEST = 1,
+    ACCESS_ACCEPT = 2,
+    ACCESS_REJECT = 3,
+    ACCOUNTING_REQUEST = 4,
+    ACCOUNTING_RESPONSE = 5,
+    ACCOUNTING_STATUS = 6,
+    PASSWORD_REQUEST = 7,
+    PASSWORD_ACK = 8,
+    PASSWORD_REJECT = 9,
+    ACCOUNTING_MESSAGE = 10,
+    ACCESS_CHALLENGE = 11
+};
+
+
 // max length of User-Password attribute
 #define D_USER_PASSWORD_MAX_LENGTH    128
 #define CHAP_VALUE_LENGTH             16
@@ -219,7 +237,7 @@ public:
      *
      * @return attribute's length
      */
-    unsigned char getLength(void);
+    uint8_t getLength(void);
 
     /// Set attribute length
     /**
