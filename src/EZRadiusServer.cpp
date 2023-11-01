@@ -9,6 +9,7 @@ using namespace std;
 EZRadiusServer::EZRadiusServer()
 {
     m_pUDPServer = nullptr;
+    _radiusallback = nullptr;
 
     //set default ports
     setAuthenticationPort(D_RADIUS_AUTHENTICATION_PORT);
@@ -90,7 +91,12 @@ void EZRadiusServer::onReceiveUDPData(clsUDPListener* pListener, void*p, clsUDPS
         RType = (PacketTypeCodes)request.getCode();
     }
 
-    pThis->onReceiveRequest(RType, request, UDPClient);
+    //pThis->onReceiveRequest(RType, request, UDPClient);
+
+    if(pThis->_radiusallback){
+        pThis->_radiusallback(RType, request, UDPClient);
+    }
+
 }
 
 void EZRadiusServer::onReceiveRequest(PacketTypeCodes PacketType, RadiusPacket &pRequest, clsUDPSocket &UDPClient)
@@ -115,4 +121,9 @@ void EZRadiusServer::onReceiveRequest(PacketTypeCodes PacketType, RadiusPacket &
 
 
 
+}
+
+void EZRadiusServer::onReceiveRequest(const RADIUSCallback &callback)
+{
+    this->_radiusallback = callback;
 }

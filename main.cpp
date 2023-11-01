@@ -1,3 +1,4 @@
+#include <Wrench/clsUDPSocket.h>
 #include <iostream>
 #include <Wrench/log.h>
 #include <unordered_set>
@@ -6,6 +7,27 @@
 using namespace std;
 
 EZRadiusServer m_EZRadiusServer;
+
+void onReceiveRequest(PacketTypeCodes PacketType, RadiusPacket &pRequest, clsUDPSocket &UDPClient)
+{
+    pRequest.dump();
+
+    //NAS-IP-Address
+    AttrValue attr = pRequest.getAttribute(D_ATTR_USER_PASSWORD);
+
+
+    LOG("getAttribute [%u][%u][%s]", attr.ValueType, attr.intValue, attr.strValue.c_str());
+
+
+
+    LOG_COLOR(Green, "onReceiveRequest PacketType[%s] NAS-IP[%s]  Username[%s] Psassword[%s] NAS_IP_ADDRESS[%s]\n",
+              pRequest.getCodeDescription(PacketType),
+              UDPClient.getIPAddress(),
+              pRequest.getAttribute(D_ATTR_USER_NAME).strValue.c_str() ,
+              pRequest.getAttribute(D_ATTR_CHAP_PASSWORD).strValue.c_str(),
+              pRequest.getAttribute(D_ATTR_NAS_IP_ADDRESS).strValue.c_str()
+              );
+}
 
 int main()
 {
@@ -28,6 +50,7 @@ int main()
 
     m_EZRadiusServer.setAuthenticationPort(1812);
     m_EZRadiusServer.setSecret("123456");
+    m_EZRadiusServer.onReceiveRequest(onReceiveRequest);
     m_EZRadiusServer.Start();
 
     //LOG_COLOR(Green, "Hiiii ");

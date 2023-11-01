@@ -2,10 +2,12 @@
 #define EZRADIUSSERVER_H
 #include "src/RadiusPacket.h"
 #include "src/RadiusSecret.h"
+#include <functional>
 
 class clsUDPServer;
 class clsUDPSocket;
 class clsUDPListener;
+typedef std::function<void(PacketTypeCodes, RadiusPacket &, clsUDPSocket &)> RADIUSCallback;
 class EZRadiusServer
 {
     //udp server
@@ -20,6 +22,9 @@ class EZRadiusServer
 
     // Request received from the network
     RadiusPacket  m_request;
+
+    //callbacl
+    RADIUSCallback _radiusallback;
 
 
     static void onReceiveUDPData(clsUDPListener* pListener, void*p, clsUDPSocket& UDPClient, const char*Data, int DataLength);
@@ -38,6 +43,7 @@ public:
     RadiusSecret *Secret();
 
     void onReceiveRequest(PacketTypeCodes PacketType, RadiusPacket &pRequest, clsUDPSocket &UDPClient);
+    void onReceiveRequest(const RADIUSCallback &callback);
 };
 
 #endif // EZRADIUSSERVER_H
