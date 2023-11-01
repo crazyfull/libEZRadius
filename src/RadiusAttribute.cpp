@@ -45,11 +45,11 @@ static const char *AttrTypeDescription[] =
     "Login-IP-Host",            // 14
     "Login-Service",            // 15
     "Login-TCP-Port",           // 16
-    "Unassigned",                  // 17
+    "Unassigned",               // 17
     "Reply-Message",            // 18
     "Callback-Number",          // 19
     "Callback-Id",              // 20
-    "Unassigned",                  // 21
+    "Unassigned",               // 21
     "Framed-Route",             // 22
     "Framed-IPX-Network",       // 23
     "State",                    // 24
@@ -193,7 +193,7 @@ void RadiusAttribute::dump(AttributeFormat_e p_format)
         char l_data[D_USER_PASSWORD_MAX_LENGTH];
         uint16_t l_length;
         getUserPassword(l_data, l_length);
-        printf("USER_PASSWORD1: [%s]", l_data);
+        printf("USER_PASSWORD: [%s]", l_data);
     }
         break;
 

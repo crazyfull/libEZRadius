@@ -93,41 +93,26 @@ void EZRadiusServer::onReceiveUDPData(clsUDPListener* pListener, void*p, clsUDPS
     pThis->onReceiveRequest(RType, request, UDPClient);
 }
 
-string getUserName(RadiusPacket *pRequest){
-
-    string ret;
-    RadiusAttribute l_attr;
-    if (pRequest->findAttribute(D_ATTR_USER_NAME, l_attr) == RC_SUCCESS) {
-
-        const char* user;
-        uint16_t userLen;
-        if (l_attr.getString(user, userLen) == RC_SUCCESS) {
-            ret.append(user, userLen);
-        }
-    }
-    return ret;
-}
-
-
-
 void EZRadiusServer::onReceiveRequest(PacketTypeCodes PacketType, RadiusPacket &pRequest, clsUDPSocket &UDPClient)
 {
-    //pRequest.dump();
+    pRequest.dump();
 
-    AttrValue attr = pRequest.getAttribute(D_ATTR_USER_NAME);
-    LOG("getAttribute [%s]", attr.strValue);
+    //NAS-IP-Address
+    AttrValue attr = pRequest.getAttribute(D_ATTR_USER_PASSWORD);
+
+
+    LOG("getAttribute [%u][%u][%s]", attr.ValueType, attr.intValue, attr.strValue.c_str());
 
 
 
-    LOG_COLOR(Red, "onReceiveRequest PacketType[%s] NAS-IP[%s]  Username[%s]\n",
+    LOG_COLOR(Green, "onReceiveRequest PacketType[%s] NAS-IP[%s]  Username[%s] Psassword[%s] NAS_IP_ADDRESS[%s]\n",
               pRequest.getCodeDescription(PacketType),
               UDPClient.getIPAddress(),
-              getUserName(&pRequest).c_str()
+              pRequest.getAttribute(D_ATTR_USER_NAME).strValue.c_str() ,
+              pRequest.getAttribute(D_ATTR_CHAP_PASSWORD).strValue.c_str(),
+              pRequest.getAttribute(D_ATTR_NAS_IP_ADDRESS).strValue.c_str()
 );
 
-    //AttrTypeDescription[D_ATTR_USER_NAME];
-
-    // pRequest.get
 
 
 }

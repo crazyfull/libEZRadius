@@ -465,13 +465,30 @@ AttrValue RadiusPacket::getAttribute(uint8_t attrType){
     RadiusAttribute l_attr;
     if (findAttribute(attrType, l_attr) == RC_SUCCESS) {
 
-        if(getAttributeType(attrType) == ATTR_TYPE_FORMAT_STRING){
-
-            if (l_attr.getString(value.strValue, value.strValueLen) == RC_SUCCESS) {
-                //ret.append(user, userLen);
+        value.ValueType = getAttributeType(attrType);
+        if(value.ValueType == ATTR_TYPE_FORMAT_STRING ){
+            //Get String
+            uint16_t strValueLen = 0;
+            const char *strValue;
+            if (l_attr.getString(strValue, strValueLen) == RC_SUCCESS) {
+                value.strValue.append(strValue, strValueLen);
             }
-        }else{
 
+        }else if (value.ValueType == ATTR_TYPE_PASSWORD){
+
+            //Get PAP Password
+            uint16_t pwlength = 0;
+            char pw[D_USER_PASSWORD_MAX_LENGTH];
+            if (l_attr.getUserPassword(pw, pwlength) == RC_SUCCESS){
+                value.strValue.append(pw, pwlength);
+            }
+        }else if(value.ValueType == ATTR_TYPE_IP_ADDRESS){
+            //Get IP-Address V4 Format
+            struct in_addr addr = l_attr.getIPAddress();
+            value.strValue.append(inet_ntoa(addr));
+
+        }else{
+            //Get Numbers (uint32)
             value.intValue = l_attr.getNumber();
         }
     }

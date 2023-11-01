@@ -9,6 +9,7 @@
 #define _RADIUSPACKET_H__
 
 #include "RadiusAttribute.h"
+#include <string>
 
 
 // Radius packet code values (from RFC2865)
@@ -43,14 +44,6 @@
 // (hence it should be D_RADIUS_PACKET_MAX_LENGTH + D_SECRET_MAX_LENGTH)
 #define D_RAW_DATA_LENGTH           4352
 
-
-struct AttrValue
-{
-    const char *strValue = nullptr;
-    uint16_t strValueLen = 0;
-    uint32_t intValue = 0;
-};
-
 enum AttrValueTypes{
     ATTR_TYPE_INTEGER = 1,
     ATTR_TYPE_IP_ADDRESS = 2,
@@ -59,6 +52,14 @@ enum AttrValueTypes{
     ATTR_TYPE_VENDOR_SPECIFIC = 5,
     ATTR_TYPE_FORMAT_STRING = 6
 };
+struct AttrValue
+{
+    uint32_t intValue = 0;
+    std::string strValue;
+    AttrValueTypes ValueType = ATTR_TYPE_FORMAT_STRING;
+};
+
+
 
 class RadiusSecret;
 class RadiusClientStack;
