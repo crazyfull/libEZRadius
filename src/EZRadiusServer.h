@@ -42,7 +42,7 @@ public:
     uint16_t AccountingPort() const;
     RadiusSecret *Secret();
 
-    void onReceiveRequest(PacketTypeCodes PacketType, RadiusPacket &pRequest, clsUDPSocket &UDPClient);
+    virtual void onReceiveRequest(PacketTypeCodes PacketType, RadiusPacket &pRequest, clsUDPSocket &UDPClient);
     void onReceiveRequest(const RADIUSCallback &callback);
 };
 

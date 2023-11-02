@@ -39,6 +39,11 @@ RadiusSecret *EZRadiusServer::Secret()
     return &m_secret;
 }
 
+void EZRadiusServer::onReceiveRequest(PacketTypeCodes PacketType, RadiusPacket &pRequest, clsUDPSocket &UDPClient)
+{
+    //not working
+}
+
 void EZRadiusServer::setSecret(const char *secret)
 {
     m_secret.setSecret(secret, strlen(secret));
@@ -95,35 +100,49 @@ void EZRadiusServer::onReceiveUDPData(clsUDPListener* pListener, void*p, clsUDPS
 
     if(pThis->_radiusallback){
         pThis->_radiusallback(RType, request, UDPClient);
+    }else{
+        pThis->onReceiveRequest(RType, request, UDPClient);
     }
-
-}
-
-void EZRadiusServer::onReceiveRequest(PacketTypeCodes PacketType, RadiusPacket &pRequest, clsUDPSocket &UDPClient)
-{
-    pRequest.dump();
-
-    //NAS-IP-Address
-    AttrValue attr = pRequest.getAttribute(D_ATTR_USER_PASSWORD);
-
-
-    LOG("getAttribute [%u][%u][%s]", attr.ValueType, attr.intValue, attr.strValue.c_str());
-
-
-
-    LOG_COLOR(Green, "onReceiveRequest PacketType[%s] NAS-IP[%s]  Username[%s] Psassword[%s] NAS_IP_ADDRESS[%s]\n",
-              pRequest.getCodeDescription(PacketType),
-              UDPClient.getIPAddress(),
-              pRequest.getAttribute(D_ATTR_USER_NAME).strValue.c_str() ,
-              pRequest.getAttribute(D_ATTR_CHAP_PASSWORD).strValue.c_str(),
-              pRequest.getAttribute(D_ATTR_NAS_IP_ADDRESS).strValue.c_str()
-);
-
-
 
 }
 
 void EZRadiusServer::onReceiveRequest(const RADIUSCallback &callback)
 {
     this->_radiusallback = callback;
+}
+
+void GenRadiusPacket(PacketTypeCodes code, clsUDPSocket& UDPClient){
+    //https://g.co/bard/share/dc01ca6ca8d4
+
+    /*
+     * Acct-Output-Gigawords 64-bit
+     * Acct-Output-Octets
+*/
+    code = ACCESS_REQUEST;
+    RadiusPacket Pck(code);
+    RadiusSecret secret("123456");
+    if (code == ACCESS_REQUEST || code == ACCOUNTING_REQUEST){
+        //zamani ke ghasde accounting ya acess dashtim bayad setesh konim
+        Pck.setSecret(&secret);
+    }
+
+
+    //for attributes
+    RadiusAttribute MyAttr;
+
+    //add user
+    Pck.addAttribute(D_ATTR_USER_NAME, MyAttr);
+    MyAttr.setString("moji");
+
+    //add pass
+    Pck.addAttribute(D_ATTR_USER_PASSWORD, MyAttr);
+    MyAttr.setUserPassword("goooz");
+
+    //Set NasPort - for IBSng
+    Pck.addAttribute(D_ATTR_NAS_PORT, MyAttr);
+    MyAttr.setNumber(90000);
+
+    //send
+    UDPClient.Send((const char*)Pck.getRawData(), Pck.getLength());
+
 }
