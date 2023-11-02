@@ -134,6 +134,7 @@ void GenRadiusPacket(PacketTypeCodes code, clsUDPSocket& UDPClient){
     Pck.addAttribute(D_ATTR_USER_NAME, MyAttr);
     MyAttr.setString("moji");
 
+
     //add pass
     Pck.addAttribute(D_ATTR_USER_PASSWORD, MyAttr);
     MyAttr.setUserPassword("goooz");

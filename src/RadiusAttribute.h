@@ -12,6 +12,7 @@
 
 // definition of Attribute Types from RFC2865
 // https://www.iana.org/assignments/radius-types/radius-types.xhtml
+
 #define D_ATTR_USER_NAME                1
 #define D_ATTR_USER_PASSWORD            2
 #define D_ATTR_CHAP_PASSWORD            3
