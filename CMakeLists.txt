@@ -38,7 +38,8 @@ if (USE_FOR_TEST)
     )
 
     #
-    add_executable(libEZRadius ${SOURCES} ${HEADERS})
+    add_executable(libEZRadius ${SOURCES} ${HEADERS}
+        src/EZResponse.h src/EZResponse.cpp)
 
     #link Dependent Libraries
     target_link_libraries(libEZRadius
