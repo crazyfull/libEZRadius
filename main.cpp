@@ -85,7 +85,7 @@ void onReceiveRequest(PacketTypeCodes PacketType, RadiusPacket &pRequest, clsUDP
     RadiusResponse.AddAttribute(D_ATTR_FRAMED_PROTOCOL, 1);
 
 
-    RadiusResponse.Send(ACCESS_ACCEPT, UDPClient, pRequest.getID(), pRequest);
+    RadiusResponse.Send(ACCESS_ACCEPT, UDPClient, pRequest.getID(),pRequest.getAuthenticator() );
 
 }
 

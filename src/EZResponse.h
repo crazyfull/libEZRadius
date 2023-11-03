@@ -17,7 +17,7 @@ public:
     EZResponse(EZRadiusServer *pRadiusServer);
     void AddAttribute(uint8_t AttType, const char* value);
     void AddAttribute(uint8_t AttType, uint32_t value);
-    void Send(PacketTypeCodes code, clsUDPSocket& UDPClient, uint8_t ID, RadiusPacket &Pck);
+    void Send(PacketTypeCodes code, clsUDPSocket& UDPClient, uint8_t ID, const unsigned char *p_auth);
 };
 
 #endif // EZRESPONSE_H
