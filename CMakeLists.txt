@@ -38,8 +38,7 @@ if (USE_FOR_TEST)
     )
 
     #
-    add_executable(libEZRadius ${SOURCES} ${HEADERS}
-        src/EZRadiusServer.h src/EZRadiusServer.cpp)
+    add_executable(libEZRadius ${SOURCES} ${HEADERS})
 
     #link Dependent Libraries
     target_link_libraries(libEZRadius
