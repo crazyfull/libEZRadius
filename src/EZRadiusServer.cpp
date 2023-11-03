@@ -39,7 +39,7 @@ RadiusSecret *EZRadiusServer::Secret()
     return &m_secret;
 }
 
-void EZRadiusServer::onReceiveRequest(PacketTypeCodes PacketType, RadiusPacket &pRequest, clsUDPSocket &UDPClient)
+void EZRadiusServer::onReceiveRequest(PacketTypeCodes PacketType, RadiusPacket &pRequest, clsUDPSocket &UDPClient, EZRadiusServer *pRadiusServer)
 {
     //not working
 }
@@ -99,9 +99,9 @@ void EZRadiusServer::onReceiveUDPData(clsUDPListener* pListener, void*p, clsUDPS
     //pThis->onReceiveRequest(RType, request, UDPClient);
 
     if(pThis->_radiusallback){
-        pThis->_radiusallback(RType, request, UDPClient);
+        pThis->_radiusallback(RType, request, UDPClient, pThis);
     }else{
-        pThis->onReceiveRequest(RType, request, UDPClient);
+        pThis->onReceiveRequest(RType, request, UDPClient, pThis);
     }
 
 }
@@ -111,39 +111,4 @@ void EZRadiusServer::onReceiveRequest(const RADIUSCallback &callback)
     this->_radiusallback = callback;
 }
 
-void GenRadiusPacket(PacketTypeCodes code, clsUDPSocket& UDPClient){
-    //https://g.co/bard/share/dc01ca6ca8d4
 
-    /*
-     * Acct-Output-Gigawords 64-bit
-     * Acct-Output-Octets
-*/
-    code = ACCESS_REQUEST;
-    RadiusPacket Pck(code);
-    RadiusSecret secret("123456");
-    if (code == ACCESS_REQUEST || code == ACCOUNTING_REQUEST){
-        //zamani ke ghasde accounting ya acess dashtim bayad setesh konim
-        Pck.setSecret(&secret);
-    }
-
-
-    //for attributes
-    RadiusAttribute MyAttr;
-
-    //add user
-    Pck.addAttribute(D_ATTR_USER_NAME, MyAttr);
-    MyAttr.setString("moji");
-
-
-    //add pass
-    Pck.addAttribute(D_ATTR_USER_PASSWORD, MyAttr);
-    MyAttr.setUserPassword("goooz");
-
-    //Set NasPort - for IBSng
-    Pck.addAttribute(D_ATTR_NAS_PORT, MyAttr);
-    MyAttr.setNumber(90000);
-
-    //send
-    UDPClient.Send((const char*)Pck.getRawData(), Pck.getLength());
-
-}

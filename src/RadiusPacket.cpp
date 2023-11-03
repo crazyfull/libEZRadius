@@ -96,10 +96,8 @@ void RadiusPacket::init(unsigned char p_code)
     setID(0);
 
     m_secret = NULL;
-
     m_passwordLength = 0;
     m_passwordOffset = 0;
-
     m_oldPasswordLength = 0;
     m_oldPasswordOffset = 0;
 }

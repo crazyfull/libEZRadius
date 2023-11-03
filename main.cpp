@@ -3,12 +3,53 @@
 #include <Wrench/log.h>
 #include <unordered_set>
 #include "src/EZRadiusServer.h"
+#include "src/EZResponse.h"
 #include <typeinfo>
 using namespace std;
 
 EZRadiusServer m_EZRadiusServer;
 
-void onReceiveRequest(PacketTypeCodes PacketType, RadiusPacket &pRequest, clsUDPSocket &UDPClient)
+void GenRadiusPacket(RadiusPacket &pRequest, clsUDPSocket& UDPClient, EZRadiusServer *pRadiusServer){
+    //https://g.co/bard/share/dc01ca6ca8d4
+
+    /*
+     * Acct-Output-Gigawords 64-bit
+     * Acct-Output-Octets
+*/
+    PacketTypeCodes code = ACCESS_REQUEST;
+    RadiusPacket Pck(code);
+    RadiusSecret secret("123456");
+    if (code == ACCESS_REQUEST || code == ACCOUNTING_REQUEST){
+        //zamani ke ghasde accounting ya acess dashtim bayad setesh konim
+        Pck.setSecret(&secret);
+    }
+
+    Pck.setID(pRequest.getCode());
+    Pck.setAuthenticator(pRequest.getAuthenticator());
+
+    //for attributes
+    RadiusAttribute MyAttr;
+
+    /*
+    //add user
+    Pck.addAttribute(D_ATTR_USER_NAME, MyAttr);
+    MyAttr.setString("moji");
+
+
+    //add pass
+    Pck.addAttribute(D_ATTR_USER_PASSWORD, MyAttr);
+    MyAttr.setUserPassword("goooz");
+
+    //Set NasPort - for IBSng
+    Pck.addAttribute(D_ATTR_NAS_PORT, MyAttr);
+    MyAttr.setNumber(90000);
+*/
+    //send
+    UDPClient.Send((const char*)Pck.getRawData(), Pck.getLength());
+
+}
+
+void onReceiveRequest(PacketTypeCodes PacketType, RadiusPacket &pRequest, clsUDPSocket &UDPClient, EZRadiusServer *pRadiusServer)
 {
     pRequest.dump();
 
@@ -21,6 +62,30 @@ void onReceiveRequest(PacketTypeCodes PacketType, RadiusPacket &pRequest, clsUDP
               pRequest.getAttribute(D_ATTR_CHAP_PASSWORD).strValue.c_str(),
               pRequest.getAttribute(D_ATTR_NAS_IP_ADDRESS).strValue.c_str()
               );
+
+    //GenRadiusPacket(pRequest, UDPClient, pRadiusServer);
+
+    //
+    EZResponse RadiusResponse(pRadiusServer);
+
+/*
+    RadiusResponse.AddAttribute(D_ATTR_USER_NAME, "moji");
+    RadiusResponse.AddAttribute(D_ATTR_ACCT_SESSION_ID, "AAAAAAAAAAA");
+    RadiusResponse.AddAttribute(D_ATTR_ACCT_AUTHENTIC, 1);
+    RadiusResponse.AddAttribute(D_ATTR_ACCT_SESSION_TIME, 999999);
+  */
+
+    // add interim intravel attribute
+    RadiusResponse.AddAttribute(D_ATTR_ACCT_INTERIM_INTRAVEL, 60);
+
+    // add Service-Type attribute
+    RadiusResponse.AddAttribute(D_ATTR_SERVICE_TYPE, 2);
+
+    // add Framed-protocole
+    RadiusResponse.AddAttribute(D_ATTR_FRAMED_PROTOCOL, 1);
+
+
+    RadiusResponse.Send(ACCESS_ACCEPT, UDPClient, pRequest.getID(), pRequest);
 
 }
 

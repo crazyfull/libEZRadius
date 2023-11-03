@@ -60,7 +60,7 @@
 #define D_ATTR_ACCT_SESSION_TIME        46
 #define D_ATTR_ACCT_INPUT_PACKETS       47
 #define D_ATTR_ACCT_OUTPUT_PACKETS      48
-#define D_ATTR_TERMINATE_CAUSE          49
+#define D_ATTR_ACCT_TERMINATE_CAUSE     49
 #define D_ATTR_ACCT_MULTI_SESSION_ID    50
 #define D_ATTR_ACCT_LINK_COUNT          51
 #define D_ATTR_ACCT_INPUT_GIGAWORDS     52
@@ -100,20 +100,6 @@
 #define D_ATTR_ARAP_CHALLENGE_RESPONSE  84
 #define D_ATTR_ACCT_INTERIM_INTRAVEL    85
 
-
-// definition of Attribute Types from RFC2866
-#define D_ATTR_ACCT_STATUS_TYPE         40 
-#define D_ATTR_ACCT_DELAY_TIME          41 
-#define D_ATTR_ACCT_INPUT_OCTETS        42 
-#define D_ATTR_ACCT_OUTPUT_OCTETS       43 
-#define D_ATTR_ACCT_SESSION_ID          44 
-#define D_ATTR_ACCT_AUTHENTIC           45 
-#define D_ATTR_ACCT_SESSION_TIME        46 
-#define D_ATTR_ACCT_INPUT_PACKETS       47 
-#define D_ATTR_ACCT_OUTPUT_PACKETS      48 
-#define D_ATTR_ACCT_TERMINATE_CAUSE     49 
-#define D_ATTR_ACCT_MULTI_SESSION_ID    50 
-#define D_ATTR_ACCT_LINK_COUNT          51 
 
 
 #define D_ATTR_MAX_KNOWN_TYPE           85
