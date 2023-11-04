@@ -1,11 +1,12 @@
-#include <Wrench/clsUDPSocket.h>
-#include <iostream>
-#include <Wrench/log.h>
 #include <unordered_set>
-#include "src/EZRadiusClientIdentify.h"
-#include "src/EZRadiusServer.h"
-#include "src/EZResponse.h"
+#include <iostream>
 #include <typeinfo>
+#include <Wrench/clsUDPSocket.h>
+#include <Wrench/log.h>
+#include "EZRadiusClientIdentify.h"
+#include "EZRadiusServer.h"
+#include "EZResponse.h"
+
 using namespace std;
 
 EZRadiusServer m_EZRadiusServer;
@@ -49,29 +50,10 @@ void GenRadiusPacket(RadiusPacket &pRequest, clsUDPSocket& UDPClient, EZRadiusSe
     UDPClient.Send((const char*)Pck.getRawData(), Pck.getLength());
 
 }
-/*
-EZRadiusClientIdentify *m_pClientIdentify;
 
-void sendresponse(){
-    //
-    EZResponse RadiusResponse(&m_EZRadiusServer);
-
-    // add interim intravel attribute
-    RadiusResponse.AddAttribute(D_ATTR_ACCT_INTERIM_INTRAVEL, 60);
-
-    // add Service-Type attribute
-    RadiusResponse.AddAttribute(D_ATTR_SERVICE_TYPE, 2);
-
-    // add Framed-protocole
-    RadiusResponse.AddAttribute(D_ATTR_FRAMED_PROTOCOL, 1);
-
-    RadiusResponse.Send(ACCESS_ACCEPT, m_pClientIdentify);
-}
-*/
 void onReceiveRequest(PacketTypeCodes PacketType, RadiusPacket &pRequest, EZRadiusClientIdentify &ClientIdentify, EZRadiusServer *pRadiusServer)
 {
     pRequest.dump();
-
 
     LOG_COLOR(Green, "onReceiveRequest PacketType[%s] NAS-IP[%s]  NAS-Port[%d]  Username[%s] Psassword[%s] NAS_IP_ADDRESS[%s]\n",
               pRequest.getCodeDescription(PacketType),
@@ -136,7 +118,6 @@ int main()
 
     for(;;){
         getchar();
-
     }
     return 0;
 }

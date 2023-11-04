@@ -1,7 +1,7 @@
 #ifndef EZRADIUSCLIENTIDENTIFY_H
 #define EZRADIUSCLIENTIDENTIFY_H
 
-#include "src/RadiusPacket.h"
+#include "RadiusPacket.h"
 #include <Wrench/clsUDPSocket.h>
 
 class EZRadiusClientIdentify

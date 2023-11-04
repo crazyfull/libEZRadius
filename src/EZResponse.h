@@ -1,6 +1,6 @@
 #ifndef EZRESPONSE_H
 #define EZRESPONSE_H
-#include "src/RadiusAttribute.h"
+#include "RadiusAttribute.h"
 #include <Wrench/clsUDPSocket.h>
 #include "RadiusPacket.h"
 

@@ -1,6 +1,6 @@
 #include "EZResponse.h"
 #include "EZRadiusServer.h"
-#include "src/EZRadiusClientIdentify.h"
+#include "EZRadiusClientIdentify.h"
 
 EZResponse::EZResponse(EZRadiusServer *pRadiusServer)
 {

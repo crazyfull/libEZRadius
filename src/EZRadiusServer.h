@@ -1,7 +1,7 @@
 #ifndef EZRADIUSSERVER_H
 #define EZRADIUSSERVER_H
-#include "src/RadiusPacket.h"
-#include "src/RadiusSecret.h"
+#include "RadiusPacket.h"
+#include "RadiusSecret.h"
 #include <functional>
 
 class clsUDPServer;
