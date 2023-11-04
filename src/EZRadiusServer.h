@@ -8,7 +8,8 @@ class clsUDPServer;
 class clsUDPSocket;
 class clsUDPListener;
 class EZRadiusServer;
-typedef std::function<void(PacketTypeCodes, RadiusPacket &, clsUDPSocket &, EZRadiusServer *pRadiusServer)> RADIUSCallback;
+class EZRadiusClientIdentify;
+typedef std::function<void(PacketTypeCodes, RadiusPacket &, EZRadiusClientIdentify &ClientIdentify, EZRadiusServer *pRadiusServer)> RADIUSCallback;
 class EZRadiusServer
 {
     //udp server
@@ -43,7 +44,7 @@ public:
     uint16_t AccountingPort() const;
     RadiusSecret *Secret();
 
-    virtual void onReceiveRequest(PacketTypeCodes PacketType, RadiusPacket &pRequest, clsUDPSocket &UDPClient, EZRadiusServer *pRadiusServer);
+    virtual void onReceiveRequest(PacketTypeCodes PacketType, RadiusPacket &pRequest, EZRadiusClientIdentify &ClientIdentify, EZRadiusServer *pRadiusServer);
     void onReceiveRequest(const RADIUSCallback &callback);
 };
 

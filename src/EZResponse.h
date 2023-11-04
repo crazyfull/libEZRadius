@@ -5,6 +5,7 @@
 #include "RadiusPacket.h"
 
 class EZRadiusServer;
+class EZRadiusClientIdentify;
 class EZResponse
 {
     //server pointer
@@ -17,7 +18,7 @@ public:
     EZResponse(EZRadiusServer *pRadiusServer);
     void AddAttribute(uint8_t AttType, const char* value);
     void AddAttribute(uint8_t AttType, uint32_t value);
-    void Send(PacketTypeCodes code, clsUDPSocket& UDPClient, uint8_t ID, const unsigned char *p_auth);
+    void Send(PacketTypeCodes code, EZRadiusClientIdentify *ClientIdentify);
 };
 
 #endif // EZRESPONSE_H

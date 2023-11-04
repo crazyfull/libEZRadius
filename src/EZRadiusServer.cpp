@@ -1,4 +1,5 @@
 #include "EZRadiusServer.h"
+#include "EZRadiusClientIdentify.h"
 #include <cstring>
 #include <Wrench/clsUDPServer.h>
 #include <Wrench/clsUDPSocket.h>
@@ -39,7 +40,7 @@ RadiusSecret *EZRadiusServer::Secret()
     return &m_secret;
 }
 
-void EZRadiusServer::onReceiveRequest(PacketTypeCodes PacketType, RadiusPacket &pRequest, clsUDPSocket &UDPClient, EZRadiusServer *pRadiusServer)
+void EZRadiusServer::onReceiveRequest(PacketTypeCodes PacketType, RadiusPacket &pRequest, EZRadiusClientIdentify &ClientIdentify, EZRadiusServer *pRadiusServer)
 {
     //not working
 }
@@ -90,6 +91,7 @@ void EZRadiusServer::onReceiveUDPData(clsUDPListener* pListener, void*p, clsUDPS
     request.setSecret(pThis->Secret());
 
 
+
     PacketTypeCodes RType = UNKNOWN;
     if(request.getCode() > 11){
         RType = UNKNOWN;
@@ -97,12 +99,15 @@ void EZRadiusServer::onReceiveUDPData(clsUDPListener* pListener, void*p, clsUDPS
         RType = (PacketTypeCodes)request.getCode();
     }
 
+    //
+    EZRadiusClientIdentify RadiusClientIdentify(request.getID(), UDPClient, request.getAuthenticator());
+
     //pThis->onReceiveRequest(RType, request, UDPClient);
 
     if(pThis->_radiusallback){
-        pThis->_radiusallback(RType, request, UDPClient, pThis);
+        pThis->_radiusallback(RType, request, RadiusClientIdentify, pThis);
     }else{
-        pThis->onReceiveRequest(RType, request, UDPClient, pThis);
+        pThis->onReceiveRequest(RType, request, RadiusClientIdentify, pThis);
     }
 
 }

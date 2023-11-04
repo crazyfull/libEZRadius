@@ -2,6 +2,7 @@
 #include <iostream>
 #include <Wrench/log.h>
 #include <unordered_set>
+#include "src/EZRadiusClientIdentify.h"
 #include "src/EZRadiusServer.h"
 #include "src/EZResponse.h"
 #include <typeinfo>
@@ -48,15 +49,33 @@ void GenRadiusPacket(RadiusPacket &pRequest, clsUDPSocket& UDPClient, EZRadiusSe
     UDPClient.Send((const char*)Pck.getRawData(), Pck.getLength());
 
 }
+/*
+EZRadiusClientIdentify *m_pClientIdentify;
 
-void onReceiveRequest(PacketTypeCodes PacketType, RadiusPacket &pRequest, clsUDPSocket &UDPClient, EZRadiusServer *pRadiusServer)
+void sendresponse(){
+    //
+    EZResponse RadiusResponse(&m_EZRadiusServer);
+
+    // add interim intravel attribute
+    RadiusResponse.AddAttribute(D_ATTR_ACCT_INTERIM_INTRAVEL, 60);
+
+    // add Service-Type attribute
+    RadiusResponse.AddAttribute(D_ATTR_SERVICE_TYPE, 2);
+
+    // add Framed-protocole
+    RadiusResponse.AddAttribute(D_ATTR_FRAMED_PROTOCOL, 1);
+
+    RadiusResponse.Send(ACCESS_ACCEPT, m_pClientIdentify);
+}
+*/
+void onReceiveRequest(PacketTypeCodes PacketType, RadiusPacket &pRequest, EZRadiusClientIdentify &ClientIdentify, EZRadiusServer *pRadiusServer)
 {
     pRequest.dump();
 
 
     LOG_COLOR(Green, "onReceiveRequest PacketType[%s] NAS-IP[%s]  NAS-Port[%d]  Username[%s] Psassword[%s] NAS_IP_ADDRESS[%s]\n",
               pRequest.getCodeDescription(PacketType),
-              UDPClient.getIPAddress(),
+              ClientIdentify.UDPClient().getIPAddress(),
               pRequest.getAttribute(D_ATTR_NAS_PORT).intValue,
               pRequest.getAttribute(D_ATTR_USER_NAME).strValue.c_str() ,
               pRequest.getAttribute(D_ATTR_CHAP_PASSWORD).strValue.c_str(),
@@ -64,6 +83,7 @@ void onReceiveRequest(PacketTypeCodes PacketType, RadiusPacket &pRequest, clsUDP
               );
 
     //GenRadiusPacket(pRequest, UDPClient, pRadiusServer);
+
 
     //
     EZResponse RadiusResponse(pRadiusServer);
@@ -73,7 +93,7 @@ void onReceiveRequest(PacketTypeCodes PacketType, RadiusPacket &pRequest, clsUDP
     RadiusResponse.AddAttribute(D_ATTR_ACCT_SESSION_ID, "AAAAAAAAAAA");
     RadiusResponse.AddAttribute(D_ATTR_ACCT_AUTHENTIC, 1);
     RadiusResponse.AddAttribute(D_ATTR_ACCT_SESSION_TIME, 999999);
-  */
+*/
 
     // add interim intravel attribute
     RadiusResponse.AddAttribute(D_ATTR_ACCT_INTERIM_INTRAVEL, 60);
@@ -85,7 +105,7 @@ void onReceiveRequest(PacketTypeCodes PacketType, RadiusPacket &pRequest, clsUDP
     RadiusResponse.AddAttribute(D_ATTR_FRAMED_PROTOCOL, 1);
 
 
-    RadiusResponse.Send(ACCESS_ACCEPT, UDPClient, pRequest.getID(), pRequest.getAuthenticator() );
+    RadiusResponse.Send(ACCESS_ACCEPT, &ClientIdentify);
 }
 
 int main()
@@ -101,9 +121,9 @@ int main()
     }
 
     /*
- * https://idblender.com/tools/test-radius#85a7e4a0-6dce-4f70-a1b0-fcc8a2cdb2be
+     * https://idblender.com/tools/test-radius#85a7e4a0-6dce-4f70-a1b0-fcc8a2cdb2be
      * radtest -t pap moji moji '2.176.229.202:1812' 0 123456
-*/
+    */
 
     //Need a create a RAS list [IP,Secret]
 
@@ -112,7 +132,11 @@ int main()
     m_EZRadiusServer.onReceiveRequest(onReceiveRequest);
     m_EZRadiusServer.Start();
 
-    LOG_COLOR(Green, "Hiiii RadiusPacket: %lu", sizeof(RadiusPacket));
-    getchar();
+    LOG_COLOR(Green, "Hiiii RadiusPacket: %lu", sizeof(EZRadiusClientIdentify));
+
+    for(;;){
+        getchar();
+
+    }
     return 0;
 }
