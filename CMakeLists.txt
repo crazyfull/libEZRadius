@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.5)
 
 project(libEZRadius
-    VERSION 1.1.25
+    VERSION 1.1.26
     DESCRIPTION "radius Library"
     LANGUAGES CXX)
 
@@ -75,11 +75,7 @@ if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
 endif()
 
 #دستور سفارشی را برای پاک کردن فایل های قدیمی اضافه کنید.
-add_custom_command(
-   TARGET libEZRadius
-   PRE_BUILD
-   COMMAND rm -f ${CMAKE_SOURCE_DIR}/build
-)
+#add_custom_command(TARGET libEZRadius PRE_BUILD COMMAND rm -f ${CMAKE_SOURCE_DIR}/build)
 
 # هدف my_target را در دایرکتوری /usr/bin نصب کنید.
 #install(TARGETS libEZRadius DESTINATION ${CMAKE_INSTALL_BINDIR})
