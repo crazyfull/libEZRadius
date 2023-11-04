@@ -9,6 +9,9 @@ EZResponse::EZResponse(EZRadiusServer *pRadiusServer)
 
 void EZResponse::AddAttribute(uint8_t AttType, const char *value)
 {
+    if(!value)
+        return;
+
     //attributes
     RadiusAttribute MyAttr;
 
@@ -25,7 +28,7 @@ void EZResponse::AddAttribute(uint8_t AttType, const char *value)
         MyAttr.setIPAddress(IPaddr);
     }else{
         //plain text
-        MyAttr.setString("moji");
+        MyAttr.setString(value);
     }
 }
 
