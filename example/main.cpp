@@ -29,23 +29,6 @@ void GenRadiusPacket(RadiusPacket &pRequest, clsUDPSocket& UDPClient, EZRadiusSe
     Pck.setID(pRequest.getCode());
     Pck.setAuthenticator(pRequest.getAuthenticator());
 
-    //for attributes
-    RadiusAttribute MyAttr;
-
-    /*
-    //add user
-    Pck.addAttribute(D_ATTR_USER_NAME, MyAttr);
-    MyAttr.setString("moji");
-
-
-    //add pass
-    Pck.addAttribute(D_ATTR_USER_PASSWORD, MyAttr);
-    MyAttr.setUserPassword("goooz");
-
-    //Set NasPort - for IBSng
-    Pck.addAttribute(D_ATTR_NAS_PORT, MyAttr);
-    MyAttr.setNumber(90000);
-*/
     //send
     UDPClient.Send((const char*)Pck.getRawData(), Pck.getLength());
 
@@ -71,11 +54,14 @@ void onReceiveRequest(PacketTypeCodes PacketType, RadiusPacket &pRequest, EZRadi
     EZResponse RadiusResponse(pRadiusServer);
 
     /*
-    RadiusResponse.AddAttribute(D_ATTR_USER_NAME, "moji");
-    RadiusResponse.AddAttribute(D_ATTR_ACCT_SESSION_ID, "AAAAAAAAAAA");
+
     RadiusResponse.AddAttribute(D_ATTR_ACCT_AUTHENTIC, 1);
-    RadiusResponse.AddAttribute(D_ATTR_ACCT_SESSION_TIME, 999999);
+
 */
+    RadiusResponse.AddAttribute(D_ATTR_USER_NAME, "mojtaba");
+
+    RadiusResponse.AddAttribute(D_ATTR_NAS_IP_ADDRESS, "127.0.0.1");
+    RadiusResponse.AddAttribute(D_ATTR_ACCT_SESSION_ID, "AAAAAAAAAAA");
 
     // add interim intravel attribute
     RadiusResponse.AddAttribute(D_ATTR_ACCT_INTERIM_INTRAVEL, 60);
