@@ -78,7 +78,7 @@ endif()
 add_custom_command(
    TARGET libEZRadius
    PRE_BUILD
-   COMMAND rm -f *.o
+   COMMAND rm -f ${CMAKE_SOURCE_DIR}/build
 )
 
 # هدف my_target را در دایرکتوری /usr/bin نصب کنید.
@@ -95,5 +95,5 @@ message(STATUS "build options:
     Target system:   ${CMAKE_SYSTEM_NAME}
     C compiler:    ${CMAKE_C_COMPILER}
     Install library path:   ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}
-    Install library include path:    ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_INCLUDEDIR}  ${CMAKE_SOURCE_DIR}/build
+    Install library include path:    ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_INCLUDEDIR}
     ")
