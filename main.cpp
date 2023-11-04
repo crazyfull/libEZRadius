@@ -85,8 +85,7 @@ void onReceiveRequest(PacketTypeCodes PacketType, RadiusPacket &pRequest, clsUDP
     RadiusResponse.AddAttribute(D_ATTR_FRAMED_PROTOCOL, 1);
 
 
-    RadiusResponse.Send(ACCESS_ACCEPT, UDPClient, pRequest.getID(),pRequest.getAuthenticator() );
-
+    RadiusResponse.Send(ACCESS_ACCEPT, UDPClient, pRequest.getID(), pRequest.getAuthenticator() );
 }
 
 int main()
@@ -113,7 +112,7 @@ int main()
     m_EZRadiusServer.onReceiveRequest(onReceiveRequest);
     m_EZRadiusServer.Start();
 
-    //LOG_COLOR(Green, "Hiiii ");
+    LOG_COLOR(Green, "Hiiii RadiusPacket: %lu", sizeof(RadiusPacket));
     getchar();
     return 0;
 }

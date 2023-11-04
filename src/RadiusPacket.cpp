@@ -91,6 +91,7 @@ RadiusPacket::RadiusPacket(unsigned char p_code, RadiusPacket & p_request)
 // ---------------------------
 void RadiusPacket::init(unsigned char p_code)
 {
+    memset(this, 0, sizeof(RadiusPacket));
     setCode(p_code);
     setLength(D_RADIUS_PACKET_HEADER_LENGTH);
     setID(0);

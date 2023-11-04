@@ -80,6 +80,7 @@ void EZRadiusServer::Start()
 
 void EZRadiusServer::onReceiveUDPData(clsUDPListener* pListener, void*p, clsUDPSocket& UDPClient, const char*Data, int DataLength)
 {
+    //if Datalength lesser then 20(RADIUS_PACKET_HEADER_LENGTH) DropPacket
     if(D_RADIUS_PACKET_HEADER_LENGTH >= DataLength)
         return;
 
