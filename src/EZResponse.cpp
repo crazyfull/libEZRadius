@@ -18,6 +18,11 @@ void EZResponse::AddAttribute(uint8_t AttType, const char *value)
     if(AttType == D_ATTR_USER_PASSWORD){
         //PAP password
         MyAttr.setUserPassword(value);
+    }else if(AttType == D_ATTR_NAS_IP_ADDRESS || AttType == D_ATTR_FRAMED_IP_ADDRESS || AttType == D_ATTR_FRAMED_IP_NETMASK || AttType == D_ATTR_LOGIN_IP_HOST || AttType == D_ATTR_FRAMED_IPX_NETWORK){
+        //set IP Addresses
+        struct in_addr IPaddr;
+        IPaddr.s_addr = inet_addr(value);
+        MyAttr.setIPAddress(IPaddr);
     }else{
         //plain text
         MyAttr.setString("moji");

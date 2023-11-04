@@ -266,7 +266,6 @@ void RadiusAttribute::dump()
     case D_ATTR_FRAMED_COMPRESSION:
     case D_ATTR_LOGIN_SERVICE:
     case D_ATTR_LOGIN_TCP_PORT:
-    case D_ATTR_FRAMED_IPX_NETWORK:
     case D_ATTR_SESSION_TIMEOUT:
     case D_ATTR_IDLE_TIMEOUT:
     case D_ATTR_TERMINATION_ACTION:
@@ -299,6 +298,7 @@ void RadiusAttribute::dump()
     case D_ATTR_FRAMED_IP_ADDRESS:
     case D_ATTR_FRAMED_IP_NETMASK:
     case D_ATTR_LOGIN_IP_HOST:
+    case D_ATTR_FRAMED_IPX_NETWORK:
         dump(E_ATTR_FORMAT_IP_ADDRESS);
         break;
     case D_ATTR_USER_PASSWORD:
