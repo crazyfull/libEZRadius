@@ -11,48 +11,39 @@ using namespace std;
 
 EZRadiusServer m_EZRadiusServer;
 
-void GenRadiusPacket(RadiusPacket &pRequest, clsUDPSocket& UDPClient, EZRadiusServer *pRadiusServer){
-    //https://g.co/bard/share/dc01ca6ca8d4
 
-    /*
-     * Acct-Output-Gigawords 64-bit
-     * Acct-Output-Octets
-*/
-    PacketTypeCodes code = ACCESS_REQUEST;
-    RadiusPacket Pck(code);
-    RadiusSecret secret("123456");
-    if (code == ACCESS_REQUEST || code == ACCOUNTING_REQUEST){
-        //zamani ke ghasde accounting ya acess dashtim bayad setesh konim
-        Pck.setSecret(&secret);
+int parseAccessRequest(RadiusPacket &p_request)
+{
+    RadiusAttribute l_attr;
+    const char * l_data;
+    uint16_t l_length = 0;
+    char l_password[D_USER_PASSWORD_MAX_LENGTH];
+    memset(&l_password, 0, sizeof(l_password));
+
+
+    // verify User-Password attribute
+    if (p_request.findAttribute(D_ATTR_USER_PASSWORD, l_attr) != RC_SUCCESS)
+    {
+        printf("ERROR: Can't find User-Password attribute\n");
+        return RC_FAIL;
     }
 
-    Pck.setID(pRequest.getCode());
-    Pck.setAuthenticator(pRequest.getAuthenticator());
-
-    //for attributes
-    RadiusAttribute MyAttr;
-
-    /*
-    //add user
-    Pck.addAttribute(D_ATTR_USER_NAME, MyAttr);
-    MyAttr.setString("moji");
+    if (l_attr.getUserPassword(l_password, l_length) != RC_SUCCESS)
+    {
+        printf("ERROR: Can't parse User-Password attribute\n");
+        return RC_FAIL;
+    }
 
 
-    //add pass
-    Pck.addAttribute(D_ATTR_USER_PASSWORD, MyAttr);
-    MyAttr.setUserPassword("goooz");
+    printf("l_password: [%s]\n", l_password);
 
-    //Set NasPort - for IBSng
-    Pck.addAttribute(D_ATTR_NAS_PORT, MyAttr);
-    MyAttr.setNumber(90000);
-*/
-    //send
-    UDPClient.Send((const char*)Pck.getRawData(), Pck.getLength());
-
+    // everything looks OK
+    return RC_SUCCESS;
 }
 
 void onReceiveRequest(PacketTypeCodes PacketType, RadiusPacket &pRequest, EZRadiusClientIdentify &ClientIdentify, EZRadiusServer *pRadiusServer)
 {
+    parseAccessRequest(pRequest);
     //pRequest.dump();
 /*
     LOG_COLOR(Green, "onReceiveRequest PacketType[%s] NAS-IP[%s]  NAS-Port[%d]  Username[%s] Psassword[%s] NAS_IP_ADDRESS[%s]\n",
@@ -60,12 +51,12 @@ void onReceiveRequest(PacketTypeCodes PacketType, RadiusPacket &pRequest, EZRadi
               ClientIdentify.UDPClient().getIPAddressDescription(),
               pRequest.getAttribute(D_ATTR_NAS_PORT).intValue,
               pRequest.getAttribute(D_ATTR_USER_NAME).strValue.c_str() ,
-              pRequest.getAttribute(D_ATTR_CHAP_PASSWORD).strValue.c_str(),
+              pRequest.getAttribute(D_ATTR_USER_PASSWORD).strValue.c_str(),
               pRequest.getAttribute(D_ATTR_NAS_IP_ADDRESS).strValue.c_str()
               );
 */
 
-    LOG_COLOR(Green, "Psassword[%s]\n",pRequest.getAttribute(D_ATTR_CHAP_PASSWORD).strValue.c_str());
+    LOG_COLOR(Green, "Psassword[%s]\n",pRequest.getAttribute(D_ATTR_USER_PASSWORD).strValue.c_str());
 
 
     //
@@ -105,10 +96,11 @@ int main()
     m_EZRadiusServer.RASList()->AddRAS("123456", "127.0.0.1");
     m_EZRadiusServer.Start();
 
+/*
     auto RAS = m_EZRadiusServer.RASList()->GetRASByIP(127001);
-    //if(RAS)
-        //LOG_COLOR(Green, "RAS secret: %s", RAS->Secret);
-
+    if(RAS)
+        LOG_COLOR(Green, "RAS secret: %s", RAS->Secret);
+*/
     for(;;){
         getchar();
     }
