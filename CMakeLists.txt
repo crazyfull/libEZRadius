@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.5)
 
 project(libEZRadius
-    VERSION 1.1.26
+    VERSION 1.1.30
     DESCRIPTION "radius Library"
     LANGUAGES CXX)
 
@@ -12,7 +12,7 @@ set(CMAKE_CXX_FLAGS_RELEASE_INIT "-Wall -O2")
 
 option(BUILD_SHARED_LIBS "Build shared librarie" ON)
 ## #### #### ##add_definitions(-D USE_FOR_TEST=1)
-set(USE_FOR_TEST OFF)
+set(USE_FOR_TEST ON)
 
 # Dependent Libraries
 file(GLOB SOURCES "./src/*.cpp")
