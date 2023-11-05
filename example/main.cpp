@@ -59,7 +59,6 @@ void onReceiveRequest(PacketTypeCodes PacketType, RadiusPacket &pRequest, EZRadi
 
 */
     RadiusResponse.AddAttribute(D_ATTR_USER_NAME, "mojtaba");
-
     RadiusResponse.AddAttribute(D_ATTR_NAS_IP_ADDRESS, "127.0.0.1");
     RadiusResponse.AddAttribute(D_ATTR_ACCT_SESSION_ID, "AAAAAAAAAAA");
 
@@ -96,6 +95,7 @@ int main()
     //Need a create a RAS list [IP,Secret]
 
     m_EZRadiusServer.setAuthenticationPort(1812);
+    m_EZRadiusServer.setAccountingPort(1813);
     m_EZRadiusServer.setSecret("123456");
     m_EZRadiusServer.onReceiveRequest(onReceiveRequest);
     m_EZRadiusServer.Start();
