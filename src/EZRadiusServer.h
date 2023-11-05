@@ -1,7 +1,7 @@
 #ifndef EZRADIUSSERVER_H
 #define EZRADIUSSERVER_H
 #include "RadiusPacket.h"
-#include "RadiusSecret.h"
+#include "EZRASList.h"
 #include <functional>
 
 class clsUDPServer;
@@ -12,6 +12,9 @@ class EZRadiusClientIdentify;
 typedef std::function<void(PacketTypeCodes, RadiusPacket &, EZRadiusClientIdentify &ClientIdentify, EZRadiusServer *pRadiusServer)> RADIUSCallback;
 class EZRadiusServer
 {
+    //RAS list
+    EZRASList m_RASList;
+
     //udp server
     clsUDPServer *m_pUDPServer;
 
@@ -19,22 +22,14 @@ class EZRadiusServer
     uint16_t m_AuthPort;
     uint16_t m_AccPort;
 
-    // Secret key
-    RadiusSecret  m_secret;
-
-    // Request received from the network
-    RadiusPacket  m_request;
-
     //callbacl
     RADIUSCallback _radiusallback;
-
 
     static void onReceiveUDPData(clsUDPListener* pListener, void*p, clsUDPSocket& UDPClient, const char*Data, int DataLength);
 
 public:
     EZRadiusServer();
     ~EZRadiusServer();
-    void setSecret(const char* secret);
     void setAuthenticationPort(uint16_t newAuthenticationPort);
     void setAccountingPort(uint16_t newAccountingPort);
 
@@ -42,7 +37,7 @@ public:
     void Start();
     uint16_t AuthenticatorPort() const;
     uint16_t AccountingPort() const;
-    RadiusSecret *Secret();
+    EZRASList *RASList();
 
     virtual void onReceiveRequest(PacketTypeCodes PacketType, RadiusPacket &pRequest, EZRadiusClientIdentify &ClientIdentify, EZRadiusServer *pRadiusServer);
     void onReceiveRequest(const RADIUSCallback &callback);

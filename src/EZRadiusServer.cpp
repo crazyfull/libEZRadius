@@ -35,23 +35,14 @@ uint16_t EZRadiusServer::AccountingPort() const
     return m_AccPort;
 }
 
-RadiusSecret *EZRadiusServer::Secret()
+EZRASList *EZRadiusServer::RASList()
 {
-    return &m_secret;
+    return &m_RASList;
 }
 
 void EZRadiusServer::onReceiveRequest(PacketTypeCodes PacketType, RadiusPacket &pRequest, EZRadiusClientIdentify &ClientIdentify, EZRadiusServer *pRadiusServer)
 {
     //not working
-}
-
-void EZRadiusServer::setSecret(const char *secret)
-{
-    m_secret.setSecret(secret, strlen(secret));
-
-
-    // set secret key
-    m_request.setSecret(&m_secret);
 }
 
 void EZRadiusServer::setAuthenticationPort(uint16_t newAuthenticationPort)
@@ -81,15 +72,21 @@ void EZRadiusServer::Start()
 
 void EZRadiusServer::onReceiveUDPData(clsUDPListener* pListener, void*p, clsUDPSocket& UDPClient, const char*Data, int DataLength)
 {
+    EZRadiusServer *pThis = static_cast<EZRadiusServer*>(p);
+    RASItem *pRAS = pThis->RASList()->GetRASByIP(UDPClient.getIPAddress());
+
+    //if RAS not exit then DropPacket
+    if(!pRAS){
+        LOG("Drop Packet");
+        return;
+    }
+
     //if Datalength lesser then 20(RADIUS_PACKET_HEADER_LENGTH) DropPacket
     if(D_RADIUS_PACKET_HEADER_LENGTH >= DataLength)
         return;
 
-    EZRadiusServer *pThis = static_cast<EZRadiusServer*>(p);
-
     RadiusPacket request(Data, DataLength) ;
-    request.setSecret(pThis->Secret());
-
+    request.setSecret(&pRAS->Secret);
 
 
     PacketTypeCodes RType = UNKNOWN;
