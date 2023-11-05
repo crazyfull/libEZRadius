@@ -11,40 +11,18 @@ using namespace std;
 
 EZRadiusServer m_EZRadiusServer;
 
-void GenRadiusPacket(RadiusPacket &pRequest, clsUDPSocket& UDPClient, EZRadiusServer *pRadiusServer){
-    //https://g.co/bard/share/dc01ca6ca8d4
 
-    /*
-     * Acct-Output-Gigawords 64-bit
-     * Acct-Output-Octets
-*/
-    PacketTypeCodes code = ACCESS_REQUEST;
-    RadiusPacket Pck(code);
-    RadiusSecret secret("123456");
-    if (code == ACCESS_REQUEST || code == ACCOUNTING_REQUEST){
-        //zamani ke ghasde accounting ya acess dashtim bayad setesh konim
-        Pck.setSecret(&secret);
-    }
-
-    Pck.setID(pRequest.getCode());
-    Pck.setAuthenticator(pRequest.getAuthenticator());
-
-    //send
-    UDPClient.Send((const char*)Pck.getRawData(), Pck.getLength());
-
-}
-
-void onReceiveRequest(PacketTypeCodes PacketType, RadiusPacket &pRequest, EZRadiusClientIdentify &ClientIdentify, EZRadiusServer *pRadiusServer)
+void onReceiveRequest(RADIUSPacketTypeCodes PacketType, RadiusPacket &pRequest, EZRadiusClientIdentify &ClientIdentify, EZRadiusServer *pRadiusServer)
 {
     pRequest.dump();
 
     LOG_COLOR(Green, "onReceiveRequest PacketType[%s] NAS-IP[%s]  NAS-Port[%d]  Username[%s] Psassword[%s] NAS_IP_ADDRESS[%s]\n",
               pRequest.getCodeDescription(PacketType),
-              ClientIdentify.UDPClient().getIPAddress(),
-              pRequest.getAttribute(D_ATTR_NAS_PORT).intValue,
-              pRequest.getAttribute(D_ATTR_USER_NAME).strValue.c_str() ,
-              pRequest.getAttribute(D_ATTR_CHAP_PASSWORD).strValue.c_str(),
-              pRequest.getAttribute(D_ATTR_NAS_IP_ADDRESS).strValue.c_str()
+              ClientIdentify.UDPClient().getIPAddressDescription(),
+              pRequest.getAttribute(NAS_PORT).intValue,
+              pRequest.getAttribute(USER_NAME).strValue.c_str() ,
+              pRequest.getAttribute(USER_PASSWORD).strValue.c_str(),
+              pRequest.getAttribute(NAS_IP_ADDRESS).strValue.c_str()
               );
 
     //GenRadiusPacket(pRequest, UDPClient, pRadiusServer);
@@ -52,25 +30,17 @@ void onReceiveRequest(PacketTypeCodes PacketType, RadiusPacket &pRequest, EZRadi
 
     //
     EZResponse RadiusResponse(pRadiusServer);
-
-    /*
-
-    RadiusResponse.AddAttribute(D_ATTR_ACCT_AUTHENTIC, 1);
-
-*/
-    RadiusResponse.AddAttribute(D_ATTR_USER_NAME, "mojtaba");
-    RadiusResponse.AddAttribute(D_ATTR_NAS_IP_ADDRESS, "127.0.0.1");
-    RadiusResponse.AddAttribute(D_ATTR_ACCT_SESSION_ID, "AAAAAAAAAAA");
-
+/**/
+    RadiusResponse.AddAttribute(ACCT_AUTHENTIC, 1);
+    RadiusResponse.AddAttribute(USER_NAME, "mojtaba");
+    RadiusResponse.AddAttribute(NAS_IP_ADDRESS, "127.0.0.1");
+    RadiusResponse.AddAttribute(ACCT_SESSION_ID, "AAAAAAAAAAA");
     // add interim intravel attribute
-    RadiusResponse.AddAttribute(D_ATTR_ACCT_INTERIM_INTRAVEL, 60);
-
+    RadiusResponse.AddAttribute(ACCT_INTERIM_INTRAVEL, 60);
     // add Service-Type attribute
-    RadiusResponse.AddAttribute(D_ATTR_SERVICE_TYPE, 2);
-
+    RadiusResponse.AddAttribute(SERVICE_TYPE, 2);
     // add Framed-protocole
-    RadiusResponse.AddAttribute(D_ATTR_FRAMED_PROTOCOL, 1);
-
+    RadiusResponse.AddAttribute(FRAMED_PROTOCOL, 1);
 
     RadiusResponse.Send(ACCESS_ACCEPT, &ClientIdentify);
 }
@@ -96,8 +66,8 @@ int main()
 
     m_EZRadiusServer.setAuthenticationPort(1812);
     m_EZRadiusServer.setAccountingPort(1813);
-    m_EZRadiusServer.setSecret("123456");
     m_EZRadiusServer.onReceiveRequest(onReceiveRequest);
+    m_EZRadiusServer.RASList()->AddRAS("123456","127.0.0.1");
     m_EZRadiusServer.Start();
 
     LOG_COLOR(Green, "Hiiii RadiusPacket: %lu", sizeof(EZRadiusClientIdentify));
