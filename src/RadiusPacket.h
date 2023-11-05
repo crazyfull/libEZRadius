@@ -120,7 +120,7 @@ public:
 
     /// Find specific attribute in the packet
     int findAttribute(unsigned char p_attrType, RadiusAttribute & p_attr);
-    AttrValue getAttribute(uint8_t attrType);
+    AttrValue getAttribute(RADIUSAttribute attrType);
 
     /// Add new attribute to the packet
     int addAttribute(unsigned char p_attrType, RadiusAttribute & p_attr);

@@ -7,7 +7,7 @@ EZResponse::EZResponse(EZRadiusServer *pRadiusServer)
     m_pRadiusServer = pRadiusServer;
 }
 
-void EZResponse::AddAttribute(uint8_t AttType, const char *value)
+void EZResponse::AddAttribute(RADIUSAttribute AttType, const char *value)
 {
     if(!value)
         return;
@@ -32,7 +32,7 @@ void EZResponse::AddAttribute(uint8_t AttType, const char *value)
     }
 }
 
-void EZResponse::AddAttribute(uint8_t AttType, uint32_t value)
+void EZResponse::AddAttribute(RADIUSAttribute AttType, uint32_t value)
 {
     //https://g.co/bard/share/dc01ca6ca8d4
     //attributes
@@ -43,7 +43,7 @@ void EZResponse::AddAttribute(uint8_t AttType, uint32_t value)
     MyAttr.setNumber(value);
 }
 
-void EZResponse::Send(PacketTypeCodes code, EZRadiusClientIdentify *ClientIdentify)
+void EZResponse::Send(RADIUSPacketTypeCodes code, EZRadiusClientIdentify *ClientIdentify)
 {
     if(!ClientIdentify)
         return;

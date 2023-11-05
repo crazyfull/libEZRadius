@@ -16,9 +16,9 @@ class EZResponse
 
 public:
     EZResponse(EZRadiusServer *pRadiusServer);
-    void AddAttribute(uint8_t AttType, const char* value);
-    void AddAttribute(uint8_t AttType, uint32_t value);
-    void Send(PacketTypeCodes code, EZRadiusClientIdentify *ClientIdentify);
+    void AddAttribute(RADIUSAttribute AttType, const char* value);
+    void AddAttribute(RADIUSAttribute AttType, uint32_t value);
+    void Send(RADIUSPacketTypeCodes code, EZRadiusClientIdentify *ClientIdentify);
 };
 
 #endif // EZRESPONSE_H

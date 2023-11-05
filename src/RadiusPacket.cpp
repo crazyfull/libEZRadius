@@ -458,7 +458,7 @@ AttrValueTypes RadiusPacket::getAttributeType(uint8_t attrType){
     return ATTR_TYPE_FORMAT_STRING;
 }
 
-AttrValue RadiusPacket::getAttribute(uint8_t attrType){
+AttrValue RadiusPacket::getAttribute(RADIUSAttribute attrType){
 
     AttrValue value;
     RadiusAttribute l_attr;

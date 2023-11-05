@@ -9,7 +9,7 @@ class clsUDPSocket;
 class clsUDPListener;
 class EZRadiusServer;
 class EZRadiusClientIdentify;
-typedef std::function<void(PacketTypeCodes, RadiusPacket &, EZRadiusClientIdentify &ClientIdentify, EZRadiusServer *pRadiusServer)> RADIUSCallback;
+typedef std::function<void(RADIUSPacketTypeCodes, RadiusPacket &, EZRadiusClientIdentify &ClientIdentify, EZRadiusServer *pRadiusServer)> RADIUSCallback;
 class EZRadiusServer
 {
     //RAS list
@@ -39,7 +39,7 @@ public:
     uint16_t AccountingPort() const;
     EZRASList *RASList();
 
-    virtual void onReceiveRequest(PacketTypeCodes PacketType, RadiusPacket &pRequest, EZRadiusClientIdentify &ClientIdentify, EZRadiusServer *pRadiusServer);
+    virtual void onReceiveRequest(RADIUSPacketTypeCodes PacketType, RadiusPacket &pRequest, EZRadiusClientIdentify &ClientIdentify, EZRadiusServer *pRadiusServer);
     void onReceiveRequest(const RADIUSCallback &callback);
 };
 

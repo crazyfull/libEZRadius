@@ -13,6 +13,119 @@
 // definition of Attribute Types from RFC2865
 // https://www.iana.org/assignments/radius-types/radius-types.xhtml
 
+enum RADIUSAttribute {
+    USER_NAME = 1,
+    USER_PASSWORD = 2,
+    CHAP_PASSWORD = 3,
+    NAS_IP_ADDRESS = 4,
+    NAS_PORT = 5,
+    SERVICE_TYPE = 6,
+    FRAMED_PROTOCOL = 7,
+    FRAMED_IP_ADDRESS = 8,
+    FRAMED_IP_NETMASK = 9,
+    FRAMED_ROUTING = 10,
+    FILTER_ID = 11,
+    FRAMED_MTU = 12,
+    FRAMED_COMPRESSION = 13,
+    LOGIN_IP_HOST = 14,
+    LOGIN_SERVICE = 15,
+    LOGIN_TCP_PORT = 16,
+    OLD_PASSWORD = 17,
+    REPLY_MESSAGE = 18,
+    CALLBACK_NUMBER = 19,
+    CALLBACK_ID = 20,
+    FRAMED_ROUTE = 22,
+    FRAMED_IPX_NETWORK = 23,
+    STATE = 24,
+    CLASS = 25,
+    VENDOR_SPECIFIC = 26,
+    SESSION_TIMEOUT = 27,
+    IDLE_TIMEOUT = 28,
+    TERMINATION_ACTION = 29,
+    CALLED_STATION_ID = 30,
+    CALLING_STATION_ID = 31,
+    NAS_IDENTIFIER = 32,
+    PROXY_STATE = 33,
+    LOGIN_LAT_SERVICE = 34,
+    LOGIN_LAT_NODE = 35,
+    LOGIN_LAT_GROUP = 36,
+    FRAMED_APPLETALK_LINK = 37,
+    FRAMED_APPLETALK_NETWORK = 38,
+    FRAMED_APPLETALK_ZONE = 39,
+    ACCT_STATUS_TYPE = 40,
+    ACCT_DELAY_TIME = 41,
+    ACCT_INPUT_OCTETS = 42,
+    ACCT_OUTPUT_OCTETS = 43,
+    ACCT_SESSION_ID = 44,
+    ACCT_AUTHENTIC = 45,
+    ACCT_SESSION_TIME = 46,
+    ACCT_INPUT_PACKETS = 47,
+    ACCT_OUTPUT_PACKETS = 48,
+    ACCT_TERMINATE_CAUSE = 49,
+    ACCT_MULTI_SESSION_ID = 50,
+    ACCT_LINK_COUNT = 51,
+    ACCT_INPUT_GIGAWORDS = 52,
+    ACCT_OUTPUT_GIGAWORDS = 53,
+    EVENT_TIMESTAMP = 55,
+    EGRESS_VLANID = 56,
+    INGRESS_FILTERS = 57,
+    EGRESS_VLAN_NAME = 58,
+    USER_PRIORITY_TABLE = 59,
+    CHAP_CHALLENGE = 60,
+    NAS_PORT_TYPE = 61,
+    PORT_LIMIT = 62,
+    LOGIN_LAT_PROMPT = 63,
+    TUNNEL_TYPE = 64,
+    TUNNEL_MEDIUM_TYPE = 65,
+    TUNNEL_CLIENT_ENDPOINT = 66,
+    TUNNEL_SERVER_ENDPOINT = 67,
+    ACCT_TUNNEL_CONNECTION = 68,
+    TUNNEL_PASSWORD = 69,
+    ARAP_PASSWORD = 70,
+    ARAP_FEATURES = 71,
+    ARAP_ZONE_ACCESS = 72,
+    ARAP_SECURITY = 73,
+    ARAP_SECURITY_DATA = 74,
+    PASSWORD_RETRY = 75,
+    PROMPT = 76,
+    CONNECT_INFO = 77,
+    CONFIGURRATION_TOKEN = 78,
+    EAP_MESSAGE = 79,
+    MESSAGE_AUTHENTICATOR = 80,
+    TUNNEL_PRIVATE_GOUP_ID = 81,
+    TUNNEL_ASSIGMENT_ID = 82,
+    TUNNEL_PREFERENCE = 83,
+    ARAP_CHALLENGE_RESPONSE = 84,
+    ACCT_INTERIM_INTRAVEL = 85
+};
+
+// RADIUS Packet Type Codes
+enum RADIUSPacketTypeCodes
+{
+    UNKNOWN = 0,
+    ACCESS_REQUEST = 1,
+    ACCESS_ACCEPT = 2,
+    ACCESS_REJECT = 3,
+    ACCOUNTING_REQUEST = 4,
+    ACCOUNTING_RESPONSE = 5,
+    ACCOUNTING_STATUS = 6,
+    PASSWORD_REQUEST = 7,
+    PASSWORD_ACK = 8,
+    PASSWORD_REJECT = 9,
+    ACCOUNTING_MESSAGE = 10,
+    ACCESS_CHALLENGE = 11
+};
+
+// Values for RADIUS Attribute, Acct-Status-Type
+enum class RADIUSAcctStatusType {
+    START = 1,
+    STOP = 2,
+    INTERIM_UPDATE = 3,
+    // 4, 5, 6 reserved
+    ON = 7,
+    OFF = 8,
+};
+
 #define D_ATTR_USER_NAME                1
 #define D_ATTR_USER_PASSWORD            2
 #define D_ATTR_CHAP_PASSWORD            3
@@ -65,7 +178,7 @@
 #define D_ATTR_ACCT_LINK_COUNT          51
 #define D_ATTR_ACCT_INPUT_GIGAWORDS     52
 #define D_ATTR_ACCT_OUTPUT_GIGAWORDS    53
-//#define D_ATTR_UNASSIGNED               54
+#define D_ATTR_UNASSIGNED               54
 #define D_ATTR_EVENT_TIMESTAMP          55
 #define D_ATTR_EGRESS_VLANID            56
 #define D_ATTR_INGRESS_FILTERS          57
@@ -76,7 +189,6 @@
 #define D_ATTR_NAS_PORT_TYPE            61 
 #define D_ATTR_PORT_LIMIT               62 
 #define D_ATTR_LOGIN_LAT_PROMPT         63
-
 #define D_ATTR_TUNNEL_TYPE              64
 #define D_ATTR_TUNNEL_MEDIUM_TYPE       65
 #define D_ATTR_TUNNEL_CLIENT_ENDPOINT   66
@@ -101,9 +213,7 @@
 #define D_ATTR_ACCT_INTERIM_INTRAVEL    85
 
 
-
 #define D_ATTR_MAX_KNOWN_TYPE           85
-
 
 
 // definition of Acct-Status-Type attribute values from RFC2866
@@ -116,22 +226,7 @@
 #define D_ACCT_STATUS_OFF               8
 
 
-// RADIUS Packet Type Codes
-typedef enum PacketTypeCodes
-{
-    UNKNOWN = 0,
-    ACCESS_REQUEST = 1,
-    ACCESS_ACCEPT = 2,
-    ACCESS_REJECT = 3,
-    ACCOUNTING_REQUEST = 4,
-    ACCOUNTING_RESPONSE = 5,
-    ACCOUNTING_STATUS = 6,
-    PASSWORD_REQUEST = 7,
-    PASSWORD_ACK = 8,
-    PASSWORD_REJECT = 9,
-    ACCOUNTING_MESSAGE = 10,
-    ACCESS_CHALLENGE = 11
-};
+
 
 
 // max length of User-Password attribute

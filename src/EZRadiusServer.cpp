@@ -40,7 +40,7 @@ EZRASList *EZRadiusServer::RASList()
     return &m_RASList;
 }
 
-void EZRadiusServer::onReceiveRequest(PacketTypeCodes PacketType, RadiusPacket &pRequest, EZRadiusClientIdentify &ClientIdentify, EZRadiusServer *pRadiusServer)
+void EZRadiusServer::onReceiveRequest(RADIUSPacketTypeCodes PacketType, RadiusPacket &pRequest, EZRadiusClientIdentify &ClientIdentify, EZRadiusServer *pRadiusServer)
 {
     //not working
 }
@@ -89,11 +89,11 @@ void EZRadiusServer::onReceiveUDPData(clsUDPListener* pListener, void*p, clsUDPS
     request.setSecret(&pRAS->Secret);
 
 
-    PacketTypeCodes RType = UNKNOWN;
+    RADIUSPacketTypeCodes RType = UNKNOWN;
     if(request.getCode() > 11){
         RType = UNKNOWN;
     }else{
-        RType = (PacketTypeCodes)request.getCode();
+        RType = (RADIUSPacketTypeCodes)request.getCode();
     }
 
     //
