@@ -67,7 +67,7 @@ void EZResponse::Send(PacketTypeCodes code, EZRadiusClientIdentify *ClientIdenti
     m_Pck.setAuthenticator(ClientIdentify->Authenticator());
     m_Pck.responseAuthenticator();
 
-    m_Pck.dump();
+    //m_Pck.dump();
 
     //send
     ClientIdentify->UDPClient().Send((const char*)m_Pck.getRawData(), m_Pck.getLength());
