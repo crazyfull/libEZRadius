@@ -70,7 +70,7 @@ int main()
     m_EZRadiusServer.setAuthenticationPort(1812);
     m_EZRadiusServer.setAccountingPort(1813);
     m_EZRadiusServer.onReceiveRequest(onReceiveRequest);
-    m_EZRadiusServer.RASList()->AddRAS("123456","127.0.0.1");
+    m_EZRadiusServer.RASList()->AddRAS("123456","255.255.255.0");
     m_EZRadiusServer.Start();
 
     for(;;){
