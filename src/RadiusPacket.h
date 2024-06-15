@@ -76,6 +76,7 @@ public:
     /// Destructor
     ~RadiusPacket();
 
+    void setRawData(const char* Data, int DataLength);
     unsigned char getCode(void);
 
     /// Get packet code description

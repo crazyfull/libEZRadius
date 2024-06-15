@@ -9,8 +9,8 @@ class EZRadiusClientIdentify
     unsigned char m_Authenticator[D_AUTHENTICATOR_LENGTH+1];
     //client identify
     clsUDPSocket m_UDPClient;
-
     uint8_t m_ID;
+
 public:
     EZRadiusClientIdentify(uint8_t ID, clsUDPSocket &UDPClient, const unsigned char *pAuthenticator);
     EZRadiusClientIdentify(EZRadiusClientIdentify &ClientIdentify);

@@ -49,8 +49,7 @@ static const char *PacketCodeDescription[] =
 // ---------------------------
 // Constructor
 // ---------------------------
-RadiusPacket::RadiusPacket(unsigned char p_code)
-{
+RadiusPacket::RadiusPacket(unsigned char p_code) {
     init(p_code);
     randomAuthenticator();
 }
@@ -128,6 +127,14 @@ RadiusPacket::RadiusPacket(const RadiusPacket & p_packet)
 // ---------------------------
 RadiusPacket::~RadiusPacket()
 {
+}
+
+void RadiusPacket::setRawData(const char *Data, int DataLength)
+{
+    if(D_RADIUS_PACKET_MAX_LENGTH > DataLength ){
+        memset(m_data, 0, sizeof(m_data));
+        memcpy(m_data, Data, DataLength);
+    }
 }
 
 

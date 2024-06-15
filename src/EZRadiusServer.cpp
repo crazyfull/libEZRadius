@@ -77,7 +77,7 @@ void EZRadiusServer::onReceiveUDPData(clsUDPListener* pListener, void*p, clsUDPS
 
     //if RAS not exit then DropPacket
     if(!pRAS){
-        LOG("Drop Packet");
+        LOG("Drop Packet [%s]", UDPClient.getIPAddressDescription());
         return;
     }
 
