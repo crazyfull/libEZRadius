@@ -19,7 +19,6 @@
 
 #include "RadiusPacket.h"
 #include "RadiusSecret.h"
-#include "RadiusClientStack.h"
 
 #include "Radius.h"
 #include "md5.h"
@@ -64,13 +63,6 @@ RadiusPacket::RadiusPacket(const char *Data, int DataLength, unsigned char p_cod
         memset(m_data, 0, sizeof(m_data));
         memcpy(m_data, Data, DataLength);
     }
-}
-
-RadiusPacket::RadiusPacket(unsigned char p_code, RadiusClientStack & p_stack)
-{
-    init(p_code);
-    randomAuthenticator();
-    setID(p_stack.getNextPacketID());
 }
 
 // ---------------------------

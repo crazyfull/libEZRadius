@@ -68,7 +68,6 @@ public:
 
     /// Constructor
     RadiusPacket(const char* Data, int DataLength, unsigned char p_code = 0);
-    RadiusPacket(unsigned char p_code, RadiusClientStack & p_stack);
     RadiusPacket(unsigned char p_code, RadiusPacket & p_request);
     RadiusPacket(unsigned char p_code = 0);
     RadiusPacket(const RadiusPacket & p_packet);
