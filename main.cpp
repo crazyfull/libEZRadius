@@ -219,15 +219,16 @@ int main2()
 }
 
 int main(){
-    RadiussClientSettings radiusSettings;
+    EZClientSettings radiusSettings;
     radiusSettings.Host = "198.244.189.2";
     radiusSettings.Secret = "123456";
     radiusSettings.AccountingPort = 1813;
-    radiusSettings.AuthenticationPort = 1813;
-    radiusSettings.TimeOut = 2500;
-    radiusSettings.RetryCount = 3;
+    radiusSettings.AuthenticationPort = 1812;
+    radiusSettings.TimeOut = 1500;
+    radiusSettings.RetryCount = 1;
 
 /*
+
     EZRadiusClient AuthRequest(radiusSettings);
     AuthRequest.AddAttribute(USER_NAME, "ir1test");
     AuthRequest.AddAttribute(USER_PASSWORD, "12345");
@@ -245,28 +246,17 @@ int main(){
 */
 
 
-
     //accounting-start
     EZRadiusClient AccountingStart(radiusSettings);
-
-/*
-#Accounting-Start  requirement
-NAS-IP-Address
-Calling-Station-Id
-Acct-Session-Id
-NAS-Port-Type
-//custom to bazia radiusa ejbari
-NAS-Port
-Framed-Protocol
-Framed-IP-Address
-Acct-Authentic
-Service-Type
-*/
+    AccountingStart.AddAttribute(USER_NAME, "ir1test");
+    AccountingStart.AddAttribute(ACCT_STATUS_TYPE, (int)RADIUSAcctStatusType::START);      //1 = start
     AccountingStart.AddAttribute(NAS_IP_ADDRESS, "192.168.1.1");
     AccountingStart.AddAttribute(CALLING_STATION_ID, "192.168.1.10");
-    AccountingStart.AddAttribute(ACCT_SESSION_ID, "-----------1");
-    AccountingStart.AddAttribute(NAS_PORT_TYPE, 1); //Async
-    AccountingStart.SendRequest(ACCESS_REQUEST);    //1 start
+    AccountingStart.AddAttribute(ACCT_SESSION_ID, "-----------3");
+    AccountingStart.SendRequest(RADIUSClientRequestType::C_ACCOUNTING_REQUEST);
+
+    LOG("ResponseType [%d][%s]", AccountingStart.GetResponseType(), AccountingStart.GetResponseTypeDescription());
+    LOG("USER_NAME [%s]", AccountingStart.GetAttribute(USER_NAME).strValue.c_str());
 
     AccountingStart.DumpResponse();
 

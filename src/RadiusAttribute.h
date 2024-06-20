@@ -116,6 +116,12 @@ enum RADIUSPacketTypeCodes
     ACCESS_CHALLENGE = 11
 };
 
+enum RADIUSClientRequestType
+{
+    C_ACCESS_REQUEST = 1,
+    C_ACCOUNTING_REQUEST = 4
+};
+
 // Values for RADIUS Attribute, Acct-Status-Type
 enum class RADIUSAcctStatusType {
     START = 1,

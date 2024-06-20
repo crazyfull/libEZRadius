@@ -4,7 +4,7 @@
 #include "RadiusPacket.h"
 #include "RadiusSecret.h"
 
-struct RadiussClientSettings
+struct EZClientSettings
 {
     int TimeOut;
     int RetryCount;
@@ -16,21 +16,23 @@ struct RadiussClientSettings
 
 class EZRadiusClient
 {
-    RadiussClientSettings m_settings;
+    EZClientSettings m_settings;
     //radius packet
     RadiusPacket m_RequestPck;
     RadiusPacket m_Response;
     RadiusSecret m_Secret;
 
 public:
-    EZRadiusClient(const RadiussClientSettings &Settings);
+    EZRadiusClient(const EZClientSettings &Settings);
     void AddAttribute(RADIUSAttribute AttType, const char* value);
     void AddAttribute(RADIUSAttribute AttType, uint32_t value);
-    void SendRequest(RADIUSPacketTypeCodes RequestType);
+    void AddAttribute(RADIUSAttribute AttType, int value);
+    void SendRequest(RADIUSClientRequestType RequestType);
     RADIUSPacketTypeCodes GetResponseType();
     const char* GetResponseTypeDescription();
     AttrValue GetAttribute(RADIUSAttribute AttrType);
     void DumpResponse();
+
 };
 
 #endif // EZRADIUSCLIENT_H

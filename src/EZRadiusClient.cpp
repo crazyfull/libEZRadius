@@ -4,7 +4,7 @@
 #include <Wrench/UDPClient.h>
 #include <Wrench/log.h>
 
-EZRadiusClient::EZRadiusClient(const RadiussClientSettings &Settings) {
+EZRadiusClient::EZRadiusClient(const EZClientSettings &Settings) {
     //m_pResponse = NULL;
     m_settings = Settings;
 
@@ -40,7 +40,6 @@ void EZRadiusClient::AddAttribute(RADIUSAttribute AttType, const char *value)
 
     //add string attribute
     m_RequestPck.addAttribute(AttType, MyAttr);
-
     if(AttType == D_ATTR_USER_PASSWORD){
         //PAP password
         MyAttr.setUserPassword(value);
@@ -53,6 +52,13 @@ void EZRadiusClient::AddAttribute(RADIUSAttribute AttType, const char *value)
         //plain text
         MyAttr.setString(value);
     }
+
+
+
+}
+
+void EZRadiusClient::AddAttribute(RADIUSAttribute AttType, int value){
+    AddAttribute(AttType, (uint32_t)value);
 }
 
 void EZRadiusClient::AddAttribute(RADIUSAttribute AttType, uint32_t value)
@@ -65,7 +71,7 @@ void EZRadiusClient::AddAttribute(RADIUSAttribute AttType, uint32_t value)
     MyAttr.setNumber(value);
 }
 
-void EZRadiusClient::SendRequest(RADIUSPacketTypeCodes RequestType){
+void EZRadiusClient::SendRequest(RADIUSClientRequestType RequestType){
 
     //set request type
     m_RequestPck.setCode(RequestType);
@@ -74,6 +80,17 @@ void EZRadiusClient::SendRequest(RADIUSPacketTypeCodes RequestType){
     m_RequestPck.randomID();   //packet identificator
     //m_Pck.setID();           //custom packet identificator
 
+    if (RequestType == C_ACCOUNTING_REQUEST)
+        m_RequestPck.accountingRequestAuthenticator();
+
+    // if packet has User-Password attribute, it should re-encode it
+    /*
+    if ((RequestType == C_ACCESS_REQUEST) ||  (RequestType == C_ACCOUNTING_REQUEST))
+        m_RequestPck.setSecret(&m_Secret);
+    */
+
+    //m_RequestPck.dump();
+
     //AddAttribute(USER_NAME, "ir1test");
     //AddAttribute(USER_PASSWORD, "12345");
 
@@ -81,7 +98,7 @@ void EZRadiusClient::SendRequest(RADIUSPacketTypeCodes RequestType){
     UDPClient udpClient;
     udpClient.setHost(m_settings.Host.c_str());
     udpClient.setTimeOut(m_settings.TimeOut);
-    if(RequestType == ACCESS_REQUEST){
+    if(RequestType == C_ACCESS_REQUEST){
         //set authenticator port
         udpClient.setPort(m_settings.AuthenticationPort);
     }else{
