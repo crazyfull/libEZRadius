@@ -220,7 +220,7 @@ int main2()
 
 int main(){
     EZClientSettings radiusSettings;
-    radiusSettings.Host = "198.244.189.2";  //198.244.189.2
+    radiusSettings.Host = "accounting.mojz.ir";  //198.244.189.2
     radiusSettings.Secret = "123456";
     radiusSettings.AccountingPort = 1813;
     radiusSettings.AuthenticationPort = 1812;
