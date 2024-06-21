@@ -3,6 +3,7 @@
 #include <Wrench/clsUDPSocket.h>
 #include <Wrench/UDPClient.h>
 #include <Wrench/log.h>
+#include "md5.h"
 
 EZRadiusClient::EZRadiusClient(const EZClientSettings &Settings) {
     //m_pResponse = NULL;
@@ -28,7 +29,13 @@ EZRadiusClient::EZRadiusClient(const EZClientSettings &Settings) {
     //set secret
     m_Secret.setSecret(m_settings.Secret.c_str(), m_settings.Secret.length());
     m_RequestPck.setSecret(&m_Secret);
+
+    //set packet identificator
+    m_RequestPck.randomID();   //packet identificator
+    //m_Pck.setID();           //custom packet identificator
 }
+
+
 
 void EZRadiusClient::AddAttribute(RADIUSAttribute AttType, const char *value)
 {
@@ -40,9 +47,53 @@ void EZRadiusClient::AddAttribute(RADIUSAttribute AttType, const char *value)
 
     //add string attribute
     m_RequestPck.addAttribute(AttType, MyAttr);
-    if(AttType == D_ATTR_USER_PASSWORD){
+
+    switch (AttType) {
+    case D_ATTR_USER_PASSWORD:
         //PAP password
         MyAttr.setUserPassword(value);
+        break;
+    case D_ATTR_CHAP_PASSWORD:
+    {
+        //CHAP password
+        unsigned char l_md5Buf[D_MAX_PASSWORD_LENGTH + 17];
+        unsigned char l_chapIdentifier = this->m_RequestPck.getID();
+        const char* l_password = value;
+        unsigned char l_chapResponse[16];
+
+        l_md5Buf[0] = l_chapIdentifier;
+        memcpy(l_md5Buf + 1, l_password, strlen(l_password));
+        memcpy(l_md5Buf + 1 + strlen(l_password), this->m_RequestPck.getAuthenticator(), 16); // we use a random packet authenticator as "CHAP challenge"
+
+        // calculate MD5 hash of the built buffer - it's CHAP response
+
+        MD5Calc(l_chapResponse, l_md5Buf, strlen(l_password)+17);
+
+        this->m_RequestPck.addAttribute(D_ATTR_CHAP_PASSWORD, MyAttr);
+        MyAttr.setChapIdentifier(l_chapIdentifier);
+        MyAttr.setChapString((const char*)l_chapResponse, 16);
+    }
+        break;
+    case D_ATTR_NAS_IP_ADDRESS:
+    case D_ATTR_FRAMED_IP_ADDRESS:
+    case D_ATTR_FRAMED_IP_NETMASK:
+    case D_ATTR_LOGIN_IP_HOST:
+    case D_ATTR_FRAMED_IPX_NETWORK:
+        //set IP Addresses
+        struct in_addr IPaddr;
+        IPaddr.s_addr = inet_addr(value);
+        MyAttr.setIPAddress(IPaddr);
+        break;
+
+    default:
+        //plain text
+        MyAttr.setString(value);
+        break;
+    }
+
+/*
+    if(AttType == D_ATTR_USER_PASSWORD){
+
     }else if(AttType == D_ATTR_NAS_IP_ADDRESS || AttType == D_ATTR_FRAMED_IP_ADDRESS || AttType == D_ATTR_FRAMED_IP_NETMASK || AttType == D_ATTR_LOGIN_IP_HOST || AttType == D_ATTR_FRAMED_IPX_NETWORK){
         //set IP Addresses
         struct in_addr IPaddr;
@@ -52,7 +103,7 @@ void EZRadiusClient::AddAttribute(RADIUSAttribute AttType, const char *value)
         //plain text
         MyAttr.setString(value);
     }
-
+*/
 
 
 }
@@ -77,7 +128,7 @@ void EZRadiusClient::SendRequest(RADIUSClientRequestType RequestType){
     m_RequestPck.setCode(RequestType);
 
     //
-    m_RequestPck.randomID();   //packet identificator
+    //m_RequestPck.randomID();   //packet identificator
     //m_Pck.setID();           //custom packet identificator
 
     if (RequestType == C_ACCOUNTING_REQUEST)
