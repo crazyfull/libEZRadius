@@ -18,6 +18,33 @@ void EZResponse::AddAttribute(RADIUSAttribute AttType, const char *value)
     //add string attribute
     m_Pck.addAttribute(AttType, MyAttr);
 
+
+    switch (AttType) {
+    case D_ATTR_USER_PASSWORD:
+        //PAP password
+        MyAttr.setUserPassword(value);
+        break;
+    case D_ATTR_CHAP_PASSWORD:
+        //CHAP password
+        //MyAttr.setUserPassword(value);
+        break;
+    case D_ATTR_NAS_IP_ADDRESS:
+    case D_ATTR_FRAMED_IP_ADDRESS:
+    case D_ATTR_FRAMED_IP_NETMASK:
+    case D_ATTR_LOGIN_IP_HOST:
+    case D_ATTR_FRAMED_IPX_NETWORK:
+        //set IP Addresses
+        struct in_addr IPaddr;
+        IPaddr.s_addr = inet_addr(value);
+        MyAttr.setIPAddress(IPaddr);
+        break;
+    default:
+        //plain text
+        MyAttr.setString(value);
+        break;
+    }
+
+    /*
     if(AttType == D_ATTR_USER_PASSWORD){
         //PAP password
         MyAttr.setUserPassword(value);
@@ -30,6 +57,7 @@ void EZResponse::AddAttribute(RADIUSAttribute AttType, const char *value)
         //plain text
         MyAttr.setString(value);
     }
+*/
 }
 
 void EZResponse::AddAttribute(RADIUSAttribute AttType, uint32_t value)
