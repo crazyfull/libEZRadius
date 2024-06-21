@@ -1,37 +1,42 @@
-#include <unordered_set>
-#include <iostream>
-#include <typeinfo>
-#include <Wrench/clsUDPSocket.h>
 #include <Wrench/log.h>
 #include <EZRadius/EZRadiusClient.h>
-using namespace std;
 
 int main(){
+    //create radius settings
     EZClientSettings radiusSettings;
-    radiusSettings.Host = "198.244.189.2";  //198.244.189.2
+    radiusSettings.Host = "accounting.mojz.ir";
     radiusSettings.Secret = "123456";
     radiusSettings.AccountingPort = 1813;
     radiusSettings.AuthenticationPort = 1812;
-    radiusSettings.TimeOut = 1500;
+    radiusSettings.TimeOut = 1500;              //millisecond
     radiusSettings.RetryCount = 1;
 
 
+    //account
+    const char* userName = "crazyfull";
+    const char* password = "mypass";
 
-    //authentication request
+    //set authentication attribute request
     EZRadiusClient AuthRequest(radiusSettings);
-    AuthRequest.AddAttribute(USER_NAME, "ir1test");
-    //AuthRequest.AddAttribute(USER_PASSWORD, "12345");
-    AuthRequest.AddAttribute(CHAP_PASSWORD, "12345");
+    AuthRequest.AddAttribute(USER_NAME, userName);
+    //AuthRequest.AddAttribute(USER_PASSWORD, password);     //PAP-Protocol
+    AuthRequest.AddAttribute(CHAP_PASSWORD, password);       //CHAP-Protocol
+
+    //send ACCESS_REQUEST request
     AuthRequest.SendRequest(C_ACCESS_REQUEST);
 
-    //
-    //AuthRequest.DumpResponse();
-    AuthRequest.GetAttribute(MESSAGE_AUTHENTICATOR);
-    //AuthRequest.GetAttribute(REPLY_MESSAGE);
-    //AuthRequest.GetResponseType();
-    LOG("ResponseType [%s]", AuthRequest.GetResponseTypeDescription());
+    //dump response (if exist)
+    AuthRequest.DumpResponse();
+
+
+    //get server response code
+    LOG("ResponseType [%u][%s]", AuthRequest.GetResponseType(), AuthRequest.GetResponseTypeDescription());
+
+    //print attribute values (if exist)
     if(AuthRequest.GetResponseType() != ACCESS_ACCEPT){
         LOG("REPLY_MESSAGE [%s]", AuthRequest.GetAttribute(REPLY_MESSAGE).strValue.c_str());
+    }else{
+        LOG("Authentication OK");
     }
 
 

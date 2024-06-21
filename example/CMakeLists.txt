@@ -17,6 +17,5 @@ install(TARGETS EZRadiusExample
 #link Dependent Libraries
 target_link_libraries(EZRadiusExample
     -llibEZRadius
-    -llibWrench
-    -lpthread -lssl -lcrypto
+    -llibWrench -lpthread -lssl -lcrypto
 )

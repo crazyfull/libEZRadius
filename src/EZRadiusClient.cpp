@@ -36,7 +36,6 @@ EZRadiusClient::EZRadiusClient(const EZClientSettings &Settings) {
 }
 
 
-
 void EZRadiusClient::AddAttribute(RADIUSAttribute AttType, const char *value)
 {
     if(!value)
