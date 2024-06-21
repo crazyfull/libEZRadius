@@ -58,7 +58,7 @@ void onReceiveRequest(RADIUSPacketTypeCodes PacketType, RadiusPacket &pRequest, 
     RadiusResponse.Send(ACCESS_ACCEPT, &ClientIdentify);
 }
 
-int main()
+int main2()
 {
     /*
      * https://idblender.com/tools/test-radius#85a7e4a0-6dce-4f70-a1b0-fcc8a2cdb2be
