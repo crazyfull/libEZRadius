@@ -12,6 +12,7 @@
 
 // definition of Attribute Types from RFC2865
 // https://www.iana.org/assignments/radius-types/radius-types.xhtml
+#define D_MAX_PASSWORD_LENGTH 256
 
 enum RADIUSAttribute {
     USER_NAME = 1,
