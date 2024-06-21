@@ -1,19 +1,16 @@
 #include <unordered_set>
 #include <iostream>
 #include <typeinfo>
-#include <Wrench/clsUDPSocket.h>
+
 #include <Wrench/log.h>
 #include <EZRadius/EZRadiusClientIdentify.h>
 #include <EZRadius/EZRadiusServer.h>
 #include <EZRadius/EZResponse.h>
 
-using namespace std;
-
-EZRadiusServer m_EZRadiusServer;
-
 
 void onReceiveRequest(RADIUSPacketTypeCodes PacketType, RadiusPacket &pRequest, EZRadiusClientIdentify &ClientIdentify, EZRadiusServer *pRadiusServer)
 {
+    //print request details
     pRequest.dump();
 
     LOG_COLOR(Green, "onReceiveRequest "
@@ -36,26 +33,34 @@ void onReceiveRequest(RADIUSPacketTypeCodes PacketType, RadiusPacket &pRequest, 
               );
 
 
-    if((RADIUSAcctStatusType)pRequest.getAttribute(ACCT_STATUS_TYPE).intValue == RADIUSAcctStatusType::START){
-
-        LOG("Accounting start");
+    if(PacketType == ACCOUNTING_REQUEST){
+        if((RADIUSAcctStatusType)pRequest.getAttribute(ACCT_STATUS_TYPE).intValue == RADIUSAcctStatusType::START){
+            LOG("request Accounting start");
+            return;
+        }
     }
 
-    //
-    EZResponse RadiusResponse(pRadiusServer);
-    /**/
-    RadiusResponse.AddAttribute(ACCT_AUTHENTIC, 1);
-    RadiusResponse.AddAttribute(USER_NAME, "mojtaba");
-    RadiusResponse.AddAttribute(NAS_IP_ADDRESS, "127.0.0.1");
-    RadiusResponse.AddAttribute(ACCT_SESSION_ID, "AAAAAAAAAAA");
-    // add interim intravel attribute
-    RadiusResponse.AddAttribute(ACCT_INTERIM_INTRAVEL, 60);
-    // add Service-Type attribute
-    RadiusResponse.AddAttribute(SERVICE_TYPE, 2);
-    // add Framed-protocole
-    RadiusResponse.AddAttribute(FRAMED_PROTOCOL, 1);
 
-    RadiusResponse.Send(ACCESS_ACCEPT, &ClientIdentify);
+    //example response for ACCESS_ACCEPT
+    if(PacketType == ACCESS_REQUEST){
+        EZResponse RadiusResponse(pRadiusServer);
+        RadiusResponse.AddAttribute(USER_NAME, "crazyfull");
+        RadiusResponse.AddAttribute(NAS_IP_ADDRESS, "127.0.0.1");
+        RadiusResponse.AddAttribute(ACCT_SESSION_ID, "--client-seassion---");
+
+        // add interim intravel attribute
+        RadiusResponse.AddAttribute(ACCT_INTERIM_INTRAVEL, 60);
+        RadiusResponse.AddAttribute(ACCT_AUTHENTIC, 1);         //1: RADIUS
+
+        // add Service-Type attribute
+        RadiusResponse.AddAttribute(SERVICE_TYPE, 2);            //2: Framed
+        // add Framed-protocole
+        RadiusResponse.AddAttribute(FRAMED_PROTOCOL, (int)0);    //0: PPP
+
+        //send response to client
+        RadiusResponse.Send(ACCESS_ACCEPT, &ClientIdentify);
+    }
+
 }
 
 int main2()
@@ -67,10 +72,12 @@ int main2()
 
     //Need a create a RAS list [IP,Secret]
 
+    EZRadiusServer m_EZRadiusServer;
     m_EZRadiusServer.setAuthenticationPort(1812);
     m_EZRadiusServer.setAccountingPort(1813);
-    m_EZRadiusServer.onReceiveRequest(onReceiveRequest);
-    m_EZRadiusServer.RASList()->AddRAS("123456","255.255.255.0");
+    m_EZRadiusServer.onReceiveRequest(onReceiveRequest);            //set a call back function for get all requests
+    m_EZRadiusServer.RASList()->AddRAS("123456", "127.0.0.1");      //access to NAP-IP with the secret
+    m_EZRadiusServer.RASList()->AddRAS("123456", "192.168.1.10");
     m_EZRadiusServer.Start();
 
     for(;;){

@@ -12,6 +12,30 @@ int main(){
     radiusSettings.RetryCount = 1;
 
 
+    //username
+    const char* userName = "crazyfull";
+
+    //accounting-start
+    EZRadiusClient Accounting(radiusSettings);
+    Accounting.AddAttribute(ACCT_STATUS_TYPE, (int)RADIUSAcctStatusType::START);    //Accounting request type
+
+    //set Attribute for Accounting-start
+    Accounting.AddAttribute(USER_NAME, userName);
+    Accounting.AddAttribute(NAS_IP_ADDRESS, "192.168.1.1");                         //Set NAS-IP
+    Accounting.AddAttribute(CALLING_STATION_ID, "192.168.1.10");                    //Set Client-IP
+    Accounting.AddAttribute(ACCT_SESSION_ID, "----my-seassion----");                //set Client Seassion
+
+    //send ACCOUNTING_REQUEST request
+    Accounting.SendRequest(RADIUSClientRequestType::C_ACCOUNTING_REQUEST);
+
+    //dump accounting response
+    Accounting.DumpResponse();
+
+    LOG("ResponseType [%d][%s]", Accounting.GetResponseType(), Accounting.GetResponseTypeDescription());
+    LOG("USER_NAME [%s]", Accounting.GetAttribute(USER_NAME).strValue.c_str());
+
+
+/*
     //account
     const char* userName = "crazyfull";
     const char* password = "mypass";
@@ -38,23 +62,11 @@ int main(){
     }else{
         LOG("Authentication OK");
     }
-
-
-    /*
-    //accounting-start
-    EZRadiusClient AccountingStart(radiusSettings);
-    AccountingStart.AddAttribute(USER_NAME, "ir1test");
-    AccountingStart.AddAttribute(ACCT_STATUS_TYPE, (int)RADIUSAcctStatusType::START);      //1 = start
-    AccountingStart.AddAttribute(NAS_IP_ADDRESS, "192.168.1.1");
-    AccountingStart.AddAttribute(CALLING_STATION_ID, "192.168.1.10");
-    AccountingStart.AddAttribute(ACCT_SESSION_ID, "-----------3");
-    AccountingStart.SendRequest(RADIUSClientRequestType::C_ACCOUNTING_REQUEST);
-
-    LOG("ResponseType [%d][%s]", AccountingStart.GetResponseType(), AccountingStart.GetResponseTypeDescription());
-    LOG("USER_NAME [%s]", AccountingStart.GetAttribute(USER_NAME).strValue.c_str());
-
-    AccountingStart.DumpResponse();
 */
+
+    /**/
+
+
     getchar();
     return 0;
 }
