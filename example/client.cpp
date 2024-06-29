@@ -1,9 +1,11 @@
 #include <Wrench/log.h>
 #include <EZRadius/EZRadiusClient.h>
+#include <unistd.h>
+EZClientSettings radiusSettings;
 
 int main(){
     //create radius settings
-    EZClientSettings radiusSettings;
+
     radiusSettings.Host = "accounting.mojz.ir";
     radiusSettings.Secret = "123456";
     radiusSettings.AccountingPort = 1813;
