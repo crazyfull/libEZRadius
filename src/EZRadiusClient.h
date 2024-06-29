@@ -12,6 +12,7 @@ struct EZClientSettings
     int AccountingPort;
     std::string Host;
     std::string Secret;
+    std::string NAS_IP;
 };
 
 class EZRadiusClient
