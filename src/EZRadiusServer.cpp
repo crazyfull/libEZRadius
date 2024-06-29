@@ -90,7 +90,7 @@ void EZRadiusServer::onReceiveUDPData(clsUDPListener* pListener, void*p, clsUDPS
 
 
     RADIUSPacketTypeCodes RType = UNKNOWN;
-    if(request.getCode() > 11){
+    if(request.getCode() > D_PACKET_MAX_KNOWN_CODE){
         RType = UNKNOWN;
     }else{
         RType = (RADIUSPacketTypeCodes)request.getCode();

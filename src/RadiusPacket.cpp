@@ -42,6 +42,35 @@ static const char *PacketCodeDescription[] =
         "Access-Challenge",         // 11
         "Status-Server",            // 12
         "Status-Client",            // 13
+        "Reserved",                 // 14
+        "Reserved",                 // 15
+        "Reserved",                 // 16
+        "Reserved",                 // 17
+        "Reserved",                 // 18
+        "Reserved",                 // 19
+        "Reserved",                 // 20
+        "Resource-Free-Request",    // 21
+        "Resource-Free-Response",   // 22
+        "Resource-Query-Request",   // 23
+        "Resource-Query-Response",  // 24
+        "Alternate-Resource-Reclaim-Request", // 25
+        "NAS-Reboot-Request",       // 26
+        "NAS-Reboot-Response",      // 27
+        "Reserved",                 // 28
+        "Reserved",                 // 29
+        "Next-Passcode",            // 30
+        "New-Pin",                  // 31
+        "Terminate-Session",        // 32
+        "Password-Expired",         // 33
+        "Reserved",                 // 34
+        "Reserved",                 // 35
+        "Reserved",                 // 36
+        "Reserved",                 // 37
+        "Reserved",                 // 38
+        "Reserved",                 // 39
+        "Disconnect-Request",       // 40
+        "Disconnect-ACK",           // 41
+        "Disconnect-NAK",           // 42
 };
 
 
@@ -154,7 +183,7 @@ void RadiusPacket::setCode(unsigned char p_code)
 const char * RadiusPacket::getCodeDescription(void)
 {
     unsigned char l_code = getCode();
-    if (l_code > D_PACKET_MAX_KNOWN_CODE)
+    if (l_code > D_PACKET_MAX_KNOWN_CODE )
         return PacketCodeDescription[0];
     else
         return PacketCodeDescription[l_code];
@@ -162,7 +191,7 @@ const char * RadiusPacket::getCodeDescription(void)
 
 const char * RadiusPacket::getCodeDescription(unsigned char l_code )
 {
-    if (l_code > D_PACKET_MAX_KNOWN_CODE)
+    if (l_code > D_PACKET_MAX_KNOWN_CODE )
         return PacketCodeDescription[0];
     else
         return PacketCodeDescription[l_code];

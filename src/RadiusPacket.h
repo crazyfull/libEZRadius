@@ -31,7 +31,7 @@
 #define D_PACKET_STATUS_SERVER          12
 #define D_PACKET_STATUS_CLIENT          13
 
-#define D_PACKET_MAX_KNOWN_CODE         13
+#define D_PACKET_MAX_KNOWN_CODE         42
 
 
 

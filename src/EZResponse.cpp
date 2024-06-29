@@ -85,13 +85,12 @@ void EZResponse::Send(RADIUSPacketTypeCodes code, EZRadiusClientIdentify *Client
     m_Pck.setCode(code);
     m_Pck.setID(ClientIdentify->ID());
 
-    if (code == ACCESS_REQUEST || code == ACCOUNTING_REQUEST){
+    if (code == ACCESS_REQUEST || code == ACCOUNTING_REQUEST  ){    //|| code == DISCONNECT_ACK || code == DISCONNECT_NAK
         //zamani ke ghasde accounting ya acess dashtim bayad setesh konim
-        m_Pck.setSecret(&pRAS->Secret);
+        //m_Pck.setSecret(&pRAS->Secret); //???
     }
 
-    //RadiusSecret secret("123456");
-    m_Pck.setSecret(&pRAS->Secret);
+    m_Pck.setSecret(&pRAS->Secret); //???
     m_Pck.setAuthenticator(ClientIdentify->Authenticator());
     m_Pck.responseAuthenticator();
 
