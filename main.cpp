@@ -7,6 +7,7 @@
 #include "EZRadiusServer.h"
 #include "EZResponse.h"
 #include "EZRadiusClient.h"
+#include "EZCoA.h"
 
 using namespace std;
 
@@ -14,7 +15,7 @@ EZRadiusServer m_EZRadiusServer;
 
 
 
-void onReceiveRequest(RADIUSPacketTypeCodes PacketType, RadiusPacket &pRequest, EZRadiusClientIdentify &ClientIdentify, EZRadiusServer *pRadiusServer)
+void onReceiveRequest(RADIUSPacketTypeCodes PacketType, RadiusPacket &pRequest, EZRadiusClientIdentify &ClientIdentify, EZRadiusServer *pRadiusServer, void *p)
 {
     pRequest.dump();
 
@@ -186,9 +187,60 @@ NAS-IP-Address = 192.168.1.20
         RadiusResponse.Send(ACCESS_REJECT, &ClientIdentify);
     }
 */
+
+    /*
+ 1  Code = Disconnect-Request (40)
+ 1  ID = 81
+ 2  Length = 62
+16  Request Authenticator = ( be d1 31 06 2e a8 34 40 bc da 41 bf bd cb 4c 25 )
+ 9  User-Name (1) = "mojtaba" ( 6d 6f 6a 74 61 62 61 )
+ 6  NAS-IP-Address (4) = 192.168.1.10 ( c0 a8 01 0a )
+15  Calling-Station-Id (31) = "192.168.1.105" ( 31 39 32 2e 31 36 38 2e 31 2e 31 30 35 )
+12  Acct-Session-Id (44) = "SSH-213395" ( 53 53 48 2d 32 31 33 33 39 35 )
+*/
+    if(PacketType == DISCONNECT_REQUEST){
+        EZResponse RadiusResponse(pRadiusServer);
+        RadiusResponse.AddAttribute(USER_NAME, pRequest.getAttribute(USER_NAME).strValue.c_str());
+        //RadiusResponse.AddAttribute(NAS_IP_ADDRESS, pRequest.getAttribute(NAS_IP_ADDRESS).strValue.c_str());
+        //RadiusResponse.AddAttribute(CALLING_STATION_ID, pRequest.getAttribute(CALLING_STATION_ID).strValue.c_str());
+        //RadiusResponse.AddAttribute(ACCT_SESSION_ID, pRequest.getAttribute(ACCT_SESSION_ID).strValue.c_str());
+        RadiusResponse.Send(DISCONNECT_ACK, &ClientIdentify);
+
+/*
+        // add interim intravel attribute
+        //RadiusResponse.AddAttribute(ACCT_INTERIM_INTRAVEL, 60);
+        // add Service-Type attribute
+        RadiusResponse.AddAttribute(SERVICE_TYPE, 2);   //2	Framed
+        // add Framed-protocole
+        RadiusResponse.AddAttribute(FRAMED_PROTOCOL, 1);    //1 PPP
+
+        //RadiusResponse.AddAttribute(FRAMED_IP_ADDRESS, "255.255.255.254");
+        //Acct-Interim-Interval
+        RadiusResponse.AddAttribute(ACCT_INTERIM_INTRAVEL, 10);
+        RadiusResponse.AddAttribute(NAS_PORT, pRequest.getAttribute(NAS_PORT).intValue);
+        RadiusResponse.AddAttribute(NAS_PORT_TYPE, 5);     //15	Ethernet        5	Virtual
+
+        //RadiusResponse.AddAttribute(CALLING_STATION_ID, "192.168.1.10");
+        //RadiusResponse.AddAttribute(CALLED_STATION_ID, "192.168.1.20");
+        RadiusResponse.AddAttribute(ACCT_SESSION_ID, pRequest.getAttribute(ACCT_SESSION_ID).intValue);
+
+        RadiusResponse.AddAttribute(FRAMED_IP_ADDRESS, "192.168.1.0/24");
+        //RadiusResponse.AddAttribute(FRAMED_IP_NETMASK, "255.255.255.0");
+        //RadiusResponse.AddAttribute(FRAMED_MTU, 1500);
+        //RadiusResponse.AddAttribute(SESSION_TIMEOUT, 3600); //sec
+        //RadiusResponse.AddAttribute(IDLE_TIMEOUT, 10);
+        //RadiusResponse.AddAttribute(FRAMED_IP_ADDRESS, "0.0.0.0");
+        //RadiusResponse.AddAttribute(TERMINATION_ACTION, 1800);
+
+        //RadiusResponse.AddAttribute(ACCT_AUTHENTIC, 1);//1 RADIUS    2 Local    3 Remote
+        RadiusResponse.AddAttribute(ACCT_DELAY_TIME, 1);
+
+*/
+
+    }
 }
 
-int main2()
+int main3()
 {
     /*
      * https://idblender.com/tools/test-radius#85a7e4a0-6dce-4f70-a1b0-fcc8a2cdb2be
@@ -197,10 +249,12 @@ int main2()
 
     //Need a create a RAS list [IP,Secret]
 
-    m_EZRadiusServer.setAuthenticationPort(1812);
-    m_EZRadiusServer.setAccountingPort(1813);
-    m_EZRadiusServer.onReceiveRequest(onReceiveRequest);
-    m_EZRadiusServer.RASList()->AddRAS("123456", "192.168.1.20");
+
+
+    m_EZRadiusServer.setAuthenticationPort(3799);
+    m_EZRadiusServer.setAccountingPort(3799);
+    m_EZRadiusServer.SeRequestCallback(onReceiveRequest);
+    m_EZRadiusServer.RASList()->AddRAS("123456", "198.244.189.2");
     m_EZRadiusServer.RASList()->AddRAS("123456", "192.168.1.10");
     m_EZRadiusServer.RASList()->AddRAS("123456", "127.0.0.1");
     m_EZRadiusServer.RASList()->AddRAS("123456", "85.9.96.165");
@@ -218,7 +272,7 @@ int main2()
     return 0;
 }
 
-int main(){
+int main2(){
     EZClientSettings radiusSettings;
     radiusSettings.Host = "accounting.mojz.ir";  //198.244.189.2
     radiusSettings.Secret = "123456";
@@ -263,5 +317,42 @@ int main(){
     AccountingStart.DumpResponse();
 */
     getchar();
+    return 0;
+}
+
+
+RADIUSPacketTypeCodes onCoaCallback(RADIUSPacketTypeCodes type, RadiusPacket& request, EZResponse &response, void *p){
+
+    //
+    request.dump();
+
+    if(type == DISCONNECT_REQUEST){
+        response.AddAttribute(USER_NAME, request.getAttribute(USER_NAME).strValue.c_str());
+        response.AddAttribute(NAS_IP_ADDRESS, request.getAttribute(NAS_IP_ADDRESS).strValue.c_str());
+        response.AddAttribute(CALLING_STATION_ID, request.getAttribute(CALLING_STATION_ID).strValue.c_str());
+        response.AddAttribute(ACCT_SESSION_ID, request.getAttribute(ACCT_SESSION_ID).strValue.c_str());
+    }
+    return DISCONNECT_ACK;
+}
+
+int main()
+{
+    EZClientSettings radiusSettings;
+    radiusSettings.Host = "accounting.mojz.ir";         //198.244.189.2
+    radiusSettings.Secret = "123456";
+    radiusSettings.AccountingPort = 1813;
+    radiusSettings.AuthenticationPort = 1812;
+    radiusSettings.CoAPort = 3799;
+    radiusSettings.TimeOut = 1500;
+    radiusSettings.RetryCount = 1;
+
+    EZCoA CoA(radiusSettings);
+    CoA.SetGetRequests(onCoaCallback, nullptr);
+    CoA.Start();
+
+
+    for(;;){
+        getchar();
+    }
     return 0;
 }
