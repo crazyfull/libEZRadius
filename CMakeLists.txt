@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.5)
 
 project(libEZRadius
-    VERSION 1.3.2
+    VERSION 1.4.0
     DESCRIPTION "radius Library"
     LANGUAGES CXX)
 
@@ -15,7 +15,7 @@ option(BUILD_SHARED_LIBS "Build shared librarie" ON)
 ## #### #### ##add_definitions(-D USE_FOR_TEST=1)
 
 #test project or library compile
-#set(USE_FOR_TEST ON)
+set(USE_FOR_TEST ON)
 option(USE_FOR_TEST "Build test project" ON)
 
 # Dependent Libraries
