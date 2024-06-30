@@ -9,7 +9,7 @@ class clsUDPSocket;
 class clsUDPListener;
 class EZRadiusServer;
 class EZRadiusClientIdentify;
-typedef std::function<void(RADIUSPacketTypeCodes, RadiusPacket &, EZRadiusClientIdentify &ClientIdentify, EZRadiusServer *pRadiusServer)> RADIUSCallback;
+typedef std::function<void(RADIUSPacketTypeCodes, RadiusPacket &, EZRadiusClientIdentify &ClientIdentify, EZRadiusServer *pRadiusServer, void *p)> RADIUSCallback;
 class EZRadiusServer
 {
     //RAS list
@@ -24,6 +24,7 @@ class EZRadiusServer
 
     //callbacl
     RADIUSCallback _radiusallback;
+    void *m_pPointerCallback;
 
     static void onReceiveUDPData(clsUDPListener* pListener, void*p, clsUDPSocket& UDPClient, const char*Data, int DataLength);
 
@@ -40,7 +41,7 @@ public:
     EZRASList *RASList();
 
     virtual void onReceiveRequest(RADIUSPacketTypeCodes PacketType, RadiusPacket &pRequest, EZRadiusClientIdentify &ClientIdentify, EZRadiusServer *pRadiusServer);
-    void onReceiveRequest(const RADIUSCallback &callback);
+    void SeRequestCallback(const RADIUSCallback &callback, void *p = nullptr);
 };
 
 #endif // EZRADIUSSERVER_H

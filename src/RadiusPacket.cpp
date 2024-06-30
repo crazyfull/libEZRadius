@@ -71,6 +71,9 @@ static const char *PacketCodeDescription[] =
         "Disconnect-Request",       // 40
         "Disconnect-ACK",           // 41
         "Disconnect-NAK",           // 42
+        "COA_REQUEST",              // 43
+        "COA_ACK",                  // 44
+        "COA_NAK",                  // 45
 };
 
 

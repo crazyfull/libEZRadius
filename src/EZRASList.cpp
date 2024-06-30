@@ -34,30 +34,30 @@ void EZRASList::MutexLock()
 
 void EZRASList::MutexUnLock()
 {
-     pthread_mutex_unlock(&m_Mutex);
+    pthread_mutex_unlock(&m_Mutex);
 }
 
 int EZRASList::GetAFree()
 {
-     for(uint32_t i = 0; i < m_MaximumCount;i++){
+    for(uint32_t i = 0; i < m_MaximumCount;i++){
         if(m_pList[i] == nullptr){
             return i;
         }
-     }
-     return -1;
+    }
+    return -1;
 }
 
 int EZRASList::GetItemByIP(uint32_t IPAddress)
 {
-     for(uint32_t i = 0; i < m_MaximumCount;i++){
+    for(uint32_t i = 0; i < m_MaximumCount;i++){
         if(m_pList[i] != nullptr){
             if(m_pList[i]->IP == IPAddress){
                 return i;
                 break;
             }
         }
-     }
-     return ISINVALID;
+    }
+    return ISINVALID;
 }
 
 EZRASList::EZRASList()
@@ -74,18 +74,23 @@ EZRASList::EZRASList()
 
 bool EZRASList::AddRAS(const char *Secret, const char* IPAddress)
 {
+    return AddRAS(Secret, inet_addr(IPAddress));
+}
+
+bool EZRASList::AddRAS(const char *Secret, in_addr_t IPAddress)
+{
     bool ret = false;
     MutexLock();
 
     // check ip exist
-    int index = GetItemByIP(inet_addr(IPAddress));
+    int index = GetItemByIP(IPAddress);
 
     //if not exist continue
     if(index == ISINVALID){
         index = GetAFree();
         if(index != ISINVALID){
             //create RAS item
-            RASItem *pRAS = new RASItem(Secret, inet_addr(IPAddress));
+            RASItem *pRAS = new RASItem(Secret, IPAddress);
 
             //add RAS pointer to list
             m_pList[index] = pRAS;
@@ -99,7 +104,7 @@ bool EZRASList::AddRAS(const char *Secret, const char* IPAddress)
     return ret;
 }
 
- RASItem *EZRASList::GetRASByIP(uint32_t IPAddress)
+RASItem *EZRASList::GetRASByIP(uint32_t IPAddress)
 {
     // search for an item by its IP
     MutexLock();
@@ -120,9 +125,27 @@ bool EZRASList::removeRASByIP(uint32_t IPAddress)
     if(index != ISINVALID){
         delete m_pList[index];
         m_pList[index] = nullptr;
+        ret = true;
     }
     MutexUnLock();
     return ret;
+}
+
+bool EZRASList::isExist(in_addr_t IPAddress)
+{
+    bool ret = false;
+    MutexLock();
+    int index = GetItemByIP(IPAddress);
+    if(index != ISINVALID){
+        ret = true;
+    }
+    MutexUnLock();
+    return ret;
+}
+
+bool EZRASList::isExist(const char *IPAddress)
+{
+    return isExist(inet_addr(IPAddress));
 }
 
 

@@ -9,23 +9,6 @@ EZRadiusClient::EZRadiusClient(const EZClientSettings &Settings) {
     //m_pResponse = NULL;
     m_settings = Settings;
 
-    //set default setting
-    if(m_settings.RetryCount <=0){
-        m_settings.RetryCount = 1;
-    }
-
-    if(m_settings.TimeOut <= 0){
-        m_settings.TimeOut = 2200;
-    }
-
-    if(m_settings.AccountingPort <= 0){
-        m_settings.AccountingPort = 1812;
-    }
-
-    if(m_settings.AuthenticationPort <= 0){
-        m_settings.AuthenticationPort = 1813;
-    }
-
     //set secret
     m_Secret.setSecret(m_settings.Secret.c_str(), m_settings.Secret.length());
     m_RequestPck.setSecret(&m_Secret);

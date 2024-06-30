@@ -32,8 +32,12 @@ private:
 public:
     EZRASList();
     bool AddRAS(const char*Secret, const char *IPAddress);
+    bool AddRAS(const char*Secret, in_addr_t IPAddress);
+
     RASItem *GetRASByIP(uint32_t IPAddress);
     bool removeRASByIP(uint32_t IPAddress);
+    bool isExist(in_addr_t IPAddress);
+    bool isExist(const char *IPAddress);
 };
 
 #endif // EZRASLIST_H

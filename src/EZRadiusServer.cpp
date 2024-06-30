@@ -11,6 +11,8 @@ EZRadiusServer::EZRadiusServer()
 {
     m_pUDPServer = nullptr;
     _radiusallback = nullptr;
+    m_pPointerCallback = nullptr;
+
 
     //set default ports
     setAuthenticationPort(D_RADIUS_AUTHENTICATION_PORT);
@@ -70,7 +72,7 @@ void EZRadiusServer::Start()
     //m_request.getRawData()
 }
 
-void EZRadiusServer::onReceiveUDPData(clsUDPListener* pListener, void*p, clsUDPSocket& UDPClient, const char*Data, int DataLength)
+void EZRadiusServer::onReceiveUDPData(clsUDPListener* pListener, void* p, clsUDPSocket& UDPClient, const char*Data, int DataLength)
 {
     EZRadiusServer *pThis = static_cast<EZRadiusServer*>(p);
     RASItem *pRAS = pThis->RASList()->GetRASByIP(UDPClient.getIPAddress());
@@ -102,15 +104,16 @@ void EZRadiusServer::onReceiveUDPData(clsUDPListener* pListener, void*p, clsUDPS
     //pThis->onReceiveRequest(RType, request, UDPClient);
 
     if(pThis->_radiusallback){
-        pThis->_radiusallback(RType, request, RadiusClientIdentify, pThis);
+        pThis->_radiusallback(RType, request, RadiusClientIdentify, pThis, pThis->m_pPointerCallback);
     }else{
         pThis->onReceiveRequest(RType, request, RadiusClientIdentify, pThis);
     }
 
 }
 
-void EZRadiusServer::onReceiveRequest(const RADIUSCallback &callback)
+void EZRadiusServer::SeRequestCallback(const RADIUSCallback &callback, void *p )
 {
+    this->m_pPointerCallback = p;
     this->_radiusallback = callback;
 }
 

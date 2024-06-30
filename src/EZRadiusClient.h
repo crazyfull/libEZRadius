@@ -3,17 +3,7 @@
 #include "RadiusAttribute.h"
 #include "RadiusPacket.h"
 #include "RadiusSecret.h"
-
-struct EZClientSettings
-{
-    int TimeOut;
-    int RetryCount;
-    int AuthenticationPort;
-    int AccountingPort;
-    std::string Host;
-    std::string Secret;
-    std::string NAS_IP;
-};
+#include "EZClientSettings.h"
 
 class EZRadiusClient
 {
