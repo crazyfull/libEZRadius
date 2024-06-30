@@ -63,7 +63,7 @@ void onReceiveRequest(RADIUSPacketTypeCodes PacketType, RadiusPacket &pRequest, 
 
 }
 
-int main2()
+int main()
 {
     /*
      * https://idblender.com/tools/test-radius#85a7e4a0-6dce-4f70-a1b0-fcc8a2cdb2be
@@ -73,11 +73,13 @@ int main2()
     //Need a create a RAS list [IP,Secret]
 
     EZRadiusServer m_EZRadiusServer;
-    m_EZRadiusServer.setAuthenticationPort(1812);
+    m_EZRadiusServer.setAuthenticationPort(3799);
     m_EZRadiusServer.setAccountingPort(1813);
     m_EZRadiusServer.onReceiveRequest(onReceiveRequest);            //set a call back function for get all requests
     m_EZRadiusServer.RASList()->AddRAS("123456", "127.0.0.1");      //access to NAP-IP with the secret
     m_EZRadiusServer.RASList()->AddRAS("123456", "192.168.1.10");
+    m_EZRadiusServer.RASList()->AddRAS("123456", "198.244.189.2");
+
     m_EZRadiusServer.Start();
 
     for(;;){

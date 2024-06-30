@@ -3,7 +3,7 @@
 #include <unistd.h>
 EZClientSettings radiusSettings;
 
-int main(){
+int main2(){
     //create radius settings
 
     radiusSettings.Host = "accounting.mojz.ir";
