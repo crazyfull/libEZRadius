@@ -11,7 +11,8 @@
 
 using namespace std;
 
-EZRadiusServer m_EZRadiusServer;
+//
+EZRadiusServer *m_pEZRadiusServer;
 
 
 
@@ -240,6 +241,7 @@ NAS-IP-Address = 192.168.1.20
     }
 }
 
+
 int main3()
 {
     /*
@@ -250,19 +252,20 @@ int main3()
     //Need a create a RAS list [IP,Secret]
 
 
+    m_pEZRadiusServer = new EZRadiusServer;
 
-    m_EZRadiusServer.setAuthenticationPort(3799);
-    m_EZRadiusServer.setAccountingPort(3799);
-    m_EZRadiusServer.SeRequestCallback(onReceiveRequest);
-    m_EZRadiusServer.RASList()->AddRAS("123456", "198.244.189.2");
-    m_EZRadiusServer.RASList()->AddRAS("123456", "192.168.1.10");
-    m_EZRadiusServer.RASList()->AddRAS("123456", "127.0.0.1");
-    m_EZRadiusServer.RASList()->AddRAS("123456", "85.9.96.165");
+    m_pEZRadiusServer->setAuthenticationPort(3799);
+    m_pEZRadiusServer->setAccountingPort(3799);
+    m_pEZRadiusServer->SeRequestCallback(onReceiveRequest);
+    m_pEZRadiusServer->RASList()->AddRAS("123456", "198.244.189.2");
+    m_pEZRadiusServer->RASList()->AddRAS("123456", "192.168.1.10");
+    m_pEZRadiusServer->RASList()->AddRAS("123456", "127.0.0.1");
+    m_pEZRadiusServer->RASList()->AddRAS("123456", "85.9.96.165");
 
-    m_EZRadiusServer.Start();
+    m_pEZRadiusServer->Start();
 
     /*
-    auto RAS = m_EZRadiusServer.RASList()->GetRASByIP(127001);
+    auto RAS = m_pEZRadiusServer.RASList()->GetRASByIP(127001);
     if(RAS)
         LOG_COLOR(Green, "RAS secret: %s", RAS->Secret);
 */
@@ -323,6 +326,8 @@ int main2(){
 
 RADIUSPacketTypeCodes onCoaCallback(RADIUSPacketTypeCodes type, RadiusPacket& request, EZResponse &response, void *p){
 
+    LOG("OnCoACallback [%u]--------------------------------------------------------------------------------", type);
+
     //
     request.dump();
 
@@ -340,14 +345,10 @@ int main()
     EZClientSettings radiusSettings;
     radiusSettings.Host = "accounting.mojz.ir";         //198.244.189.2
     radiusSettings.Secret = "123456";
-    radiusSettings.AccountingPort = 1813;
-    radiusSettings.AuthenticationPort = 1812;
     radiusSettings.CoAPort = 3799;
-    radiusSettings.TimeOut = 1500;
-    radiusSettings.RetryCount = 1;
 
     EZCoA CoA(radiusSettings);
-    CoA.SetGetRequests(onCoaCallback, nullptr);
+    CoA.SetGetRequests(onCoaCallback, m_pEZRadiusServer);
     CoA.Start();
 
 

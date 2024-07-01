@@ -14,7 +14,7 @@ class EZCoA
     CoACallback m_callback;
     EZRadiusServer *m_pServer;
     void *m_pPointerCallback;
-    static void onReceiveRequest(RADIUSPacketTypeCodes PacketType, RadiusPacket &request, EZRadiusClientIdentify &ClientIdentify, EZRadiusServer *pRadiusServer, void *p);
+    static void onGetRadiusRequest(RADIUSPacketTypeCodes PacketType, RadiusPacket &request, EZRadiusClientIdentify &ClientIdentify, EZRadiusServer *pRadiusServer, void *p);
 
 public:
     EZCoA(const EZClientSettings &Settings);

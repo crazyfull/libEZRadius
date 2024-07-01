@@ -27,14 +27,14 @@ void EZCoA::Start()
 
     m_pServer->setAuthenticationPort(m_settings.CoAPort);
     m_pServer->setAccountingPort(m_settings.CoAPort);
-    m_pServer->SeRequestCallback(onReceiveRequest, this);
+    m_pServer->SeRequestCallback(onGetRadiusRequest, this);
     m_pServer->RASList()->AddRAS(m_settings.Secret.c_str(), clsTCPSocket::GetIPFromHostAddress(m_settings.Host.c_str()).s_addr);
     m_pServer->Start();
 
 }
 
 
-void EZCoA::onReceiveRequest(RADIUSPacketTypeCodes PacketType, RadiusPacket &request, EZRadiusClientIdentify &ClientIdentify, EZRadiusServer *pRadiusServer,void *p)
+void EZCoA::onGetRadiusRequest(RADIUSPacketTypeCodes PacketType, RadiusPacket &request, EZRadiusClientIdentify &ClientIdentify, EZRadiusServer *pRadiusServer,void *p)
 {
     EZCoA *pThis = static_cast<EZCoA*>(p);
     if(!pThis){
@@ -54,7 +54,6 @@ void EZCoA::onReceiveRequest(RADIUSPacketTypeCodes PacketType, RadiusPacket &req
         EZResponse RadiusResponse(pRadiusServer);
         if(pThis->m_callback){
             RADIUSPacketTypeCodes ret = pThis->m_callback(PacketType, request, RadiusResponse, pThis->m_pPointerCallback);
-
             //RadiusResponse.AddAttribute(USER_NAME, request.getAttribute(USER_NAME).strValue.c_str());
             //RadiusResponse.AddAttribute(NAS_IP_ADDRESS, pRequest.getAttribute(NAS_IP_ADDRESS).strValue.c_str());
             //RadiusResponse.AddAttribute(CALLING_STATION_ID, pRequest.getAttribute(CALLING_STATION_ID).strValue.c_str());
