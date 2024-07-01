@@ -58,7 +58,10 @@ void EZCoA::onGetRadiusRequest(RADIUSPacketTypeCodes PacketType, RadiusPacket &r
             //RadiusResponse.AddAttribute(NAS_IP_ADDRESS, pRequest.getAttribute(NAS_IP_ADDRESS).strValue.c_str());
             //RadiusResponse.AddAttribute(CALLING_STATION_ID, pRequest.getAttribute(CALLING_STATION_ID).strValue.c_str());
             //RadiusResponse.AddAttribute(ACCT_SESSION_ID, pRequest.getAttribute(ACCT_SESSION_ID).strValue.c_str());
-            RadiusResponse.Send(ret, &ClientIdentify);
+            if(ret != UNKNOWN){
+                RadiusResponse.Send(ret, &ClientIdentify);
+            }
+
         }
     }
 
