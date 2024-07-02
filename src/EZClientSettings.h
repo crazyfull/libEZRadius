@@ -10,6 +10,7 @@ public:
     int AuthenticationPort;
     int AccountingPort;
     int CoAPort;
+    int AcctInterimIntravel;
     std::string Host;
     std::string Secret;
     std::string NAS_IP;
