@@ -29,8 +29,9 @@ void EZCoA::Start()
     m_pServer->setAccountingPort(m_settings.CoAPort);
     m_pServer->SeRequestCallback(onGetRadiusRequest, this);
     m_pServer->RASList()->AddRAS(m_settings.Secret.c_str(), clsTCPSocket::GetIPFromHostAddress(m_settings.Host.c_str()).s_addr);
+    if(m_settings.RAS_IP.length() > 0)
+        m_pServer->RASList()->AddRAS(m_settings.Secret.c_str(), clsTCPSocket::GetIPFromHostAddress(m_settings.RAS_IP.c_str()).s_addr);
     m_pServer->Start();
-
 }
 
 

@@ -14,6 +14,7 @@ public:
     std::string Host;
     std::string Secret;
     std::string NAS_IP;
+    std::string RAS_IP;
 
     EZClientSettings();
 };
