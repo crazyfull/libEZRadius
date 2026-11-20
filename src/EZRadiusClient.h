@@ -4,6 +4,7 @@
 #include "RadiusPacket.h"
 #include "RadiusSecret.h"
 #include "EZClientSettings.h"
+#include "EZMSCHAP.h"
 #include <functional>
 #include <string>
 #include <sys/socket.h>
@@ -53,6 +54,17 @@ public:
     bool AddVendorAttribute(uint32_t vendorId, unsigned char vendorType, const void *data, uint16_t length);
     bool AddVendorAttribute(uint32_t vendorId, unsigned char vendorType, const char *text);
 
+#ifdef EZRADIUS_HAS_CRYPTO
+    // MS-CHAPv2 / MS-CHAPv1 login (needs EZRADIUS_HAS_CRYPTO). They add User-Name too, so do not add it yourself.
+    // The response of an MS-CHAPv2 request carries MS-CHAP2-Success, checked by MSCHAPv2ServerVerified().
+    bool AddMSCHAPv2(const char *userName, const char *password);
+    bool AddMSCHAPv1(const char *userName, const char *password);
+    // after an OK response: true when the server proved that it knows the password (valid "S=..." value)
+    bool MSCHAPv2ServerVerified();
+    // MS-MPPE-Send-Key / MS-MPPE-Recv-Key values of the response (decrypted)
+    bool GetMPPEKeys(uint8_t sendKey[16], uint8_t recvKey[16]);
+#endif
+
     // Start the request and return at once; callback is called (once) from the reactor when it is finished.
     // false: could not start (already sent, bad settings, no reactor); callback is not called.
     bool Send(RADIUSClientRequestType RequestType, const Callback &callback);
@@ -94,6 +106,16 @@ private:
     uint16_t m_serverPort = 0;
     bool m_triedAAAA = false;
     RADIUSClientRequestType m_type = C_ACCESS_REQUEST;
+
+#ifdef EZRADIUS_HAS_CRYPTO
+    int m_msKind = 0;               // 0 none, 1 MS-CHAPv1, 2 MS-CHAPv2
+    uint8_t m_msIdent = 0;
+    uint8_t m_msAuthChallenge[16] = {0};
+    uint8_t m_msPeerChallenge[16] = {0};
+    uint8_t m_msNtResponse[24] = {0};
+    uint8_t m_msNtHash[16] = {0};
+    std::string m_msUser;
+#endif
 
     static void onResolved(const char *hostname, char **ips, size_t count, int qtype, void *user_data);
     void startWithAddress(const struct sockaddr *address, socklen_t len);
