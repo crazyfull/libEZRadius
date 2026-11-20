@@ -1,191 +1,243 @@
 # libEZRadius
 
-**An asynchronous, single-threaded RADIUS client, server and dynamic-authorization (CoA / Disconnect) library for C++17 on Linux, built on [netRector](https://github.com/crazyfull/netRector).**
+**An asynchronous, single-threaded RADIUS client, server and Dynamic Authorization (CoA / Disconnect) library for C++17 on Linux, built on [netRector](https://github.com/crazyfull/netRector).**
 
-libEZRadius implements the RADIUS protocol family end to end: packet encoding and validation, all the authenticators, PAP / CHAP / MS-CHAPv1 / MS-CHAPv2, accounting, Status-Server, RFC 5176 Dynamic Authorization (as listener *and* as sender), vendor-specific attributes, IPv4 and IPv6. Everything runs on a netRector epoll reactor: **no threads, no mutexes, no blocking calls** inside the library. A blocking client wrapper is provided for programs that do not run a reactor.
+libEZRadius provides RADIUS packet encoding and validation, client and server functionality, Authentication and Accounting, RFC 5176 Dynamic Authorization, PAP / CHAP / MS-CHAPv1 / MS-CHAPv2 helpers, and MPPE key handling. Its asynchronous API integrates with a netRector `EpollReactor`; a blocking client wrapper is also available for applications that do not use an event loop.
 
 ---
 
 ## Table of contents
 
-1. [Features](#features)
-2. [Supported standards](#supported-standards)
-3. [Architecture and threading model](#architecture-and-threading-model)
-4. [Building](#building)
-5. [Quick start](#quick-start)
-6. [API overview](#api-overview)
-7. [Supported attributes](#supported-attributes)
-8. [Security notes](#security-notes)
-9. [Testing](#testing)
-10. [Limitations](#limitations)
-11. [Project layout and credits](#project-layout-and-credits)
+1. [Why libEZRadius?](#why-libezradius)
+2. [Features](#features)
+3. [Supported standards](#supported-standards)
+4. [Architecture and threading model](#architecture-and-threading-model)
+5. [Building](#building)
+6. [Quick start](#quick-start)
+7. [API overview](#api-overview)
+8. [Supported attributes](#supported-attributes)
+9. [Security notes](#security-notes)
+10. [Testing](#testing)
+11. [Limitations](#limitations)
+12. [Project layout and credits](#project-layout-and-credits)
+
+---
+
+## Why libEZRadius?
+
+libEZRadius is intended for Linux applications that need RADIUS client and server functionality without introducing a separate networking event loop or an internal thread pool.
+
+- **Native event-loop integration:** asynchronous RADIUS operations use the application's `netrector::EpollReactor`.
+- **No internal worker threads:** the asynchronous core does not create threads or use mutex-based synchronization. Callbacks execute on the reactor thread, so application callbacks must not perform long blocking work.
+- **Asynchronous network operations:** UDP I/O, reactor timers, and DNS resolution are integrated with netRector.
+- **Client and server roles:** the library includes an asynchronous client, a blocking client wrapper, an Authentication/Accounting server, and RFC 5176 Dynamic Authorization listener and sender functionality.
+- **Built-in authentication helpers:** PAP, CHAP, MS-CHAPv1/v2, MS-CHAPv2 mutual authentication, and MPPE key handling are provided.
+- **Low-level packet access:** applications can construct and inspect RADIUS attributes and vendor-specific data directly.
+
+The asynchronous API is designed to be driven by an existing reactor. `EZRadiusSyncClient` is available when a blocking call is more appropriate.
 
 ---
 
 ## Features
 
-**Client**
-- Asynchronous `EZRadiusClient`: `Send()` returns immediately, the result is delivered by callback from the reactor.
-- Blocking `EZRadiusSyncClient`: `Send()` returns when the answer (or the timeout) is there. Same engine, driven synchronously; usable from scripts, CLI tools and worker threads.
-- Request types: Access-Request, Accounting-Request, Status-Server, Disconnect-Request, CoA-Request.
-- Timeouts and retransmissions on reactor timers (same ID and authenticator on retransmission, as required by the RFC).
-- Asynchronous DNS for the server name (A, then AAAA fallback); IPv4 and IPv6 literals.
+### Client
+
+- Asynchronous `EZRadiusClient`: `Send()` returns immediately; the result is delivered by callback from the reactor.
+- Blocking `EZRadiusSyncClient`: `Send()` returns when the answer or timeout is received. It drives a private reactor synchronously on the calling thread.
+- Request types: Access-Request, Accounting-Request, Status-Server, Disconnect-Request, and CoA-Request.
+- Timeouts and retransmissions on reactor timers. Retransmissions reuse the same Identifier and Request Authenticator.
+- Asynchronous DNS resolution for the server name (A, then AAAA fallback); IPv4 and IPv6 literals are supported.
 - A fresh UDP socket with a random source port per request.
-- Responses are accepted only if source address and port, packet code, Identifier and Response Authenticator (and Message-Authenticator when present or required) are valid.
-- PAP, CHAP, MS-CHAPv1 and MS-CHAPv2 login helpers; MS-CHAPv2 mutual authentication check and MPPE key decryption on the client side.
-- Message-Authenticator on every Access-Request by default (mitigates BlastRADIUS, CVE-2024-3596).
+- Response validation: source address and port, packet code, Identifier, Response Authenticator, and Message-Authenticator when present or required.
+- PAP, CHAP, MS-CHAPv1, and MS-CHAPv2 login helpers; MS-CHAPv2 mutual-authentication verification and client-side MPPE key decryption.
+- Message-Authenticator on every Access-Request by default.
 
-**Server**
-- `EZRadiusServer`: UDP listeners on the authentication and accounting ports (IPv4, IPv6 or dual stack).
-- Per-NAS shared secrets (`EZRASList`), IPv4 and IPv6 addresses; unknown senders are dropped silently.
-- Every request is validated before your callback runs: well-formed packet, Request Authenticator (accounting / CoA / Disconnect), Message-Authenticator (mandatory for Status-Server, optional or required for Access-Request).
-- Retransmission detection (RFC 5080): a duplicate request is not processed twice; the stored answer is sent again.
-- Automatic Status-Server answers (RFC 5997).
-- `EZResponse` builds responses: attributes, vendor-specific attributes, MS-CHAPv2 success / error, MPPE keys, automatic Response Authenticator, Message-Authenticator and Proxy-State copying (RFC 2865 §5.33).
+### Server
 
-**Dynamic authorization (RFC 5176)**
-- `EZCoA`: listener for Disconnect-Request and CoA-Request from the RADIUS server (replies ACK / NAK).
-- `EZRadiusClient` with `C_DISCONNECT_REQUEST` / `C_COA_REQUEST`: send them to a NAS (for example to kick a user from a MikroTik router).
+- `EZRadiusServer`: UDP listeners on Authentication and Accounting ports (IPv4, IPv6, or dual stack).
+- Per-NAS shared secrets (`EZRASList`) and IPv4/IPv6 NAS addresses; unknown senders are dropped silently.
+- Request validation before the application callback: packet structure, Request Authenticator where applicable, and Message-Authenticator according to packet type and configuration.
+- Duplicate request detection: a duplicate is not processed twice; the cached response is sent again.
+- Automatic Status-Server answers.
+- `EZResponse` builds responses with attributes, vendor-specific attributes, MS-CHAPv2 success/error, MPPE keys, Response Authenticator, Message-Authenticator, and Proxy-State copying.
 
-**Protocol core**
-- Hardened packet parser: every length is validated before use; malformed packets are rejected (fuzzed under ASan/UBSan).
-- Constant-time authenticator comparison, secure random Identifier and Request Authenticator.
-- PAP passwords up to 128 bytes, secrets up to 256 bytes; the 4096-byte packet limit is enforced.
-- Passwords are never printed by `dump()` unless explicitly enabled; temporary buffers are wiped.
+### Dynamic Authorization (RFC 5176)
+
+- `EZCoA`: listener for Disconnect-Request and CoA-Request from a RADIUS server; replies with ACK or NAK.
+- `EZRadiusClient` with `C_DISCONNECT_REQUEST` / `C_COA_REQUEST`: sends Dynamic Authorization requests to a NAS.
+
+### Protocol core
+
+- Packet parser validates packet and attribute lengths before use.
+- Constant-time authenticator comparison and secure random Identifier / Request Authenticator generation.
+- PAP passwords up to 128 bytes, secrets up to 256 bytes, and RADIUS packet-size limits are enforced.
+- Passwords are not printed by `dump()` unless explicitly enabled; temporary buffers are wiped.
 
 ---
 
 ## Supported standards
 
-| Standard | Title | What libEZRadius implements |
+| Standard | Title | Implementation scope |
 |---|---|---|
-| [RFC 2865](https://www.rfc-editor.org/rfc/rfc2865) | Remote Authentication Dial In User Service (RADIUS) | Packet format, Access-Request / Accept / Reject / Challenge, Request and Response Authenticator, User-Password (PAP) encryption, CHAP, attributes 1–39 and 60–63, Vendor-Specific (26), Proxy-State copying, UDP ports 1812 |
-| [RFC 2866](https://www.rfc-editor.org/rfc/rfc2866) | RADIUS Accounting | Accounting-Request / Response, Accounting Request Authenticator, attributes 40–51, port 1813 |
-| [RFC 2867](https://www.rfc-editor.org/rfc/rfc2867) | RADIUS Accounting Modifications for Tunnel Protocol Support | Acct-Tunnel-Connection (68) as a string attribute |
-| [RFC 2868](https://www.rfc-editor.org/rfc/rfc2868) | RADIUS Attributes for Tunnel Protocol Support | Tunnel attributes 64–67, 69, 81–83 (as typed attributes; Tunnel-Password is not decrypted) |
-| [RFC 2869](https://www.rfc-editor.org/rfc/rfc2869) | RADIUS Extensions | Acct-Input/Output-Gigawords (52/53), Event-Timestamp (55), Acct-Interim-Interval (85), ARAP, Connect-Info, Password-Retry, Prompt, Configuration-Token |
-| [RFC 3579](https://www.rfc-editor.org/rfc/rfc3579) | RADIUS Support for EAP | **Message-Authenticator (HMAC-MD5)** generation and verification; EAP-Message (79) is carried as an opaque attribute |
-| [RFC 5176](https://www.rfc-editor.org/rfc/rfc5176) | Dynamic Authorization Extensions to RADIUS | Disconnect-Request / ACK / NAK and CoA-Request / ACK / NAK, listener (`EZCoA`) and sender, port 3799 |
-| [RFC 5997](https://www.rfc-editor.org/rfc/rfc5997) | Use of Status-Server Packets in RADIUS | Automatic server answer, client health check (`C_STATUS_SERVER`) |
-| [RFC 5080](https://www.rfc-editor.org/rfc/rfc5080) | Common RADIUS Implementation Issues and Suggested Fixes | Duplicate request detection, response validation, retransmission with unchanged ID / authenticator, source port randomization |
+| [RFC 2865](https://www.rfc-editor.org/rfc/rfc2865) | RADIUS | Packet format, Access-Request / Accept / Reject / Challenge, Request and Response Authenticator, PAP User-Password encryption, CHAP, common attributes, Vendor-Specific (26), Proxy-State copying, UDP port 1812 |
+| [RFC 2866](https://www.rfc-editor.org/rfc/rfc2866) | RADIUS Accounting | Accounting-Request / Response, Accounting Request Authenticator, common Accounting attributes, UDP port 1813 |
+| [RFC 2867](https://www.rfc-editor.org/rfc/rfc2867) | RADIUS Accounting Modifications for Tunnel Protocol Support | Acct-Tunnel-Connection as a string attribute |
+| [RFC 2868](https://www.rfc-editor.org/rfc/rfc2868) | RADIUS Attributes for Tunnel Protocol Support | Supported Tunnel attributes as typed attributes; Tunnel-Password is not decrypted |
+| [RFC 2869](https://www.rfc-editor.org/rfc/rfc2869) | RADIUS Extensions | Acct-Input/Output-Gigawords, Event-Timestamp, Acct-Interim-Interval, ARAP and other listed attributes |
+| [RFC 3579](https://www.rfc-editor.org/rfc/rfc3579) | RADIUS Support for EAP | Message-Authenticator generation and verification; EAP-Message is carried as an opaque attribute only |
+| [RFC 5176](https://www.rfc-editor.org/rfc/rfc5176) | Dynamic Authorization Extensions to RADIUS | Disconnect-Request / ACK / NAK and CoA-Request / ACK / NAK; listener and sender; UDP port 3799 |
+| [RFC 5997](https://www.rfc-editor.org/rfc/rfc5997) | Use of Status-Server Packets in RADIUS | Automatic server answer and client health check |
+| [RFC 5080](https://www.rfc-editor.org/rfc/rfc5080) | Common RADIUS Implementation Issues and Suggested Fixes | Duplicate request detection, response validation, retransmission behavior, source-port randomization |
 | [RFC 4675](https://www.rfc-editor.org/rfc/rfc4675) | RADIUS Attributes for VLAN and Priority Support | Attributes 56–59 |
-| [RFC 2433](https://www.rfc-editor.org/rfc/rfc2433) | Microsoft PPP CHAP Extensions | MS-CHAPv1 (NT response; the legacy LM response is not supported) |
-| [RFC 2759](https://www.rfc-editor.org/rfc/rfc2759) | Microsoft PPP CHAP Extensions, Version 2 | MS-CHAPv2 verification and generation, authenticator response (`S=`), mutual authentication |
-| [RFC 2548](https://www.rfc-editor.org/rfc/rfc2548) | Microsoft Vendor-specific RADIUS Attributes | MS-CHAP-Challenge / Response / CHAP2-Response / CHAP2-Success / Error, MS-MPPE-Send/Recv-Key and Encryption-Policy/Types, key encryption with the shared secret |
-| [RFC 3079](https://www.rfc-editor.org/rfc/rfc3079) | Deriving Keys for use with Microsoft PPE (MPPE) | MPPE master and session key derivation for MS-CHAPv2 |
-| [CVE-2024-3596](https://www.kb.cert.org/vuls/id/456537) | BlastRADIUS | Message-Authenticator is added to Access-Requests by default and can be required on both sides |
+| [RFC 2433](https://www.rfc-editor.org/rfc/rfc2433) | Microsoft PPP CHAP Extensions | MS-CHAPv1 NT response; legacy LM response is not supported |
+| [RFC 2759](https://www.rfc-editor.org/rfc/rfc2759) | Microsoft PPP CHAP Extensions, Version 2 | MS-CHAPv2 verification and generation, authenticator response, mutual authentication |
+| [RFC 2548](https://www.rfc-editor.org/rfc/rfc2548) | Microsoft Vendor-specific RADIUS Attributes | MS-CHAP and MPPE vendor attributes, including MPPE key encryption |
+| [RFC 3079](https://www.rfc-editor.org/rfc/rfc3079) | Deriving Keys for use with Microsoft Point-to-Point Encryption (MPPE) | MPPE master and session key derivation for MS-CHAPv2 |
 
-Test vectors from RFC 2202 (HMAC-MD5), RFC 2865 §7.1 (PAP), RFC 2759 §9.2 (MS-CHAPv2) and RFC 3079 §3.5.3 (MPPE master key) are part of the test suite.
+The test suite includes vectors from RFC 2202 (HMAC-MD5), RFC 2865 §7.1 (PAP), RFC 2759 §9.2 (MS-CHAPv2), and RFC 3079 §3.5.3 (MPPE master key).
+
+**Transport scope:** libEZRadius currently implements RADIUS over UDP only. It does not implement RADIUS over TCP, RadSec (TLS), or DTLS. Carrying the EAP-Message attribute does not mean that EAP methods or EAP-TLS are implemented.
 
 ---
 
 ## Architecture and threading model
 
-```
+```text
  your program
-     │
-     ├── EZRadiusClient ──┐        callbacks, timers, DNS, sockets
-     ├── EZRadiusServer ──┼──►  netrector::EpollReactor  (one thread)
-     └── EZCoA ───────────┘
- EZRadiusSyncClient ──► private EpollReactor, run on the calling thread while Send() waits
+     |
+     +-- EZRadiusClient ---+
+     +-- EZRadiusServer ---+----> netrector::EpollReactor
+     +-- EZCoA ------------+      (application-owned event loop)
+
+ EZRadiusSyncClient ------------> private EpollReactor
+                                  (runs on calling thread)
 ```
 
-- Every object lives on one reactor and **must be used from that reactor's thread**. From another thread, use `reactor.post([]{ ... })`.
-- The library itself never starts a thread, takes a lock or blocks. A slow database lookup inside a request callback would block the reactor: use an asynchronous database client, or hand the work to a worker thread and send the response from the reactor with `reactor.post()`.
+- Every asynchronous object belongs to one reactor and **must be used from that reactor's thread**. From another thread, use `reactor.post([]{ ... })`.
+- The asynchronous core does not create threads, use mutex-based synchronization, or perform blocking network operations.
+- Callbacks execute on the reactor thread. A slow database lookup or other blocking work inside a callback stalls that reactor. Use an asynchronous database client, or hand work to an application-managed worker thread and post the result back with `reactor.post()`.
 - Objects must be destroyed before their reactor (or before `run()` returns). Destroying a client with a request in flight cancels it silently.
-- `EZRadiusSyncClient` owns its reactor; independent objects can be used from different threads at the same time.
+- `EZRadiusSyncClient` owns its reactor and blocks the calling thread while waiting for a result. Independent synchronous clients can be used from different threads, subject to the application's own object/thread-safety rules.
+- One `EZRadiusClient` object handles one request at a time. Call `Reset()` before building another request on that object.
 
 ---
 
 ## Building
 
-Requirements: Linux, a C++17 compiler, CMake ≥ 3.14, [netRector](https://github.com/crazyfull/netRector). BoringSSL is optional (needed for MS-CHAP; later for EAP / EAP-TLS).
+Requirements: Linux, a C++17 compiler, CMake 3.14 or newer, and [netRector](https://github.com/crazyfull/netRector). BoringSSL is optional and is required for the MS-CHAP and MPPE cryptographic functionality. EAP and EAP-TLS are not implemented.
 
 ```sh
-git clone https://github.com/crazyfull/netRector third_party/netRector      # or -DEZRADIUS_NETRECTOR_DIR=<path> or -DEZRADIUS_FETCH_NETRECTOR=ON
+git clone https://github.com/crazyfull/netRector third_party/netRector
+# Alternatively, configure EZRADIUS_NETRECTOR_DIR or EZRADIUS_FETCH_NETRECTOR.
 
-# optional: BoringSSL (MS-CHAP). netRector ships a helper that builds it:
-#   third_party/netRector/scripts/build_boringssl.sh /opt/bssl
+# Optional: build BoringSSL. netRector provides a helper script:
+# third_party/netRector/scripts/build_boringssl.sh /opt/bssl
 
-cmake -S . -B build -G Ninja -DNETRECTOR_ENABLE_TLS=OFF -DBORINGSSL_DIR=/opt/bssl
+cmake -S . -B build -G Ninja \
+  -DNETRECTOR_ENABLE_TLS=OFF \
+  -DBORINGSSL_DIR=/opt/bssl
+
 cmake --build build
 (cd build && ctest --output-on-failure)
 ```
 
-| CMake option | Default | Meaning |
-|---|---|---|
-| `EZRADIUS_NETRECTOR_DIR` | – | netRector source directory (built together with the library) |
-| `EZRADIUS_FETCH_NETRECTOR` | OFF | Download netRector with FetchContent when it is not found |
-| `BORINGSSL_DIR` | – | BoringSSL prefix (`include/` and `lib/libcrypto.a`); also read from the environment |
-| `EZRADIUS_ENABLE_CRYPTO` | ON | Use BoringSSL when found. Without it PAP, CHAP, accounting, CoA, Status-Server all work; MS-CHAP is compiled out (`EZRADIUS_HAS_CRYPTO` is not defined) |
-| `EZRADIUS_BUILD_EXAMPLES` | ON | Build `example/` |
-| `EZRADIUS_BUILD_TESTS` | ON | Build `tests/` |
-| `EZRADIUS_BUILD_FUZZER` | OFF | Build the libFuzzer target (needs clang) |
-| `EZRADIUS_SANITIZE` | OFF | AddressSanitizer + UndefinedBehaviorSanitizer |
+### CMake options
 
-Use it from your own project:
+| Option | Default | Description |
+|---|---:|---|
+| `EZRADIUS_NETRECTOR_DIR` | — | netRector source directory |
+| `EZRADIUS_FETCH_NETRECTOR` | `OFF` | Fetch netRector with FetchContent when it is not found |
+| `BORINGSSL_DIR` | — | BoringSSL prefix containing `include/` and `lib/libcrypto.a`; can also be supplied through the environment |
+| `EZRADIUS_ENABLE_CRYPTO` | `ON` | Use BoringSSL when found. Without it, PAP, CHAP, Accounting, CoA, and Status-Server remain available; MS-CHAP is compiled out (`EZRADIUS_HAS_CRYPTO` is not defined) |
+| `EZRADIUS_BUILD_EXAMPLES` | `ON` | Build examples |
+| `EZRADIUS_BUILD_TESTS` | `ON` | Build tests |
+| `EZRADIUS_BUILD_FUZZER` | `OFF` | Build the libFuzzer target (requires Clang) |
+| `EZRADIUS_SANITIZE` | `OFF` | Enable AddressSanitizer and UndefinedBehaviorSanitizer |
+
+Use the library from another CMake project:
 
 ```cmake
-add_subdirectory(libezradius)
-target_link_libraries(myapp PRIVATE EZRadius)      # also brings netRector and (if enabled) BoringSSL
+add_subdirectory(libEZRadius)
+target_link_libraries(myapp PRIVATE EZRadius)
 ```
+
+The `EZRadius` target also brings in the configured netRector and, when enabled, BoringSSL dependencies.
 
 ---
 
 ## Quick start
 
-All snippets assume `netrector::EpollReactor reactor(0, 1024);` and a `std::atomic<bool> stop` for `reactor.run(stop)`.
+The asynchronous examples below assume an application-owned reactor:
+
+```cpp
+netrector::EpollReactor reactor(0, 1024);
+std::atomic<bool> stop{false};
+```
 
 ### Asynchronous client (PAP)
 
 ```cpp
-EZClientSettings s;
-s.Host = "radius.example.com";    // IPv4, IPv6 or a name (resolved asynchronously)
-s.Secret = "shared-secret";
-s.TimeOut = 1500;                 // ms per attempt
-s.RetryCount = 3;                 // attempts
+EZClientSettings settings;
+settings.Host = "radius.example.com";
+settings.Secret = "shared-secret";
+settings.TimeOut = 1500; // milliseconds per attempt
+settings.RetryCount = 3;
 
-EZRadiusClient c(&reactor, s);
-c.AddAttribute(USER_NAME, "alice");
-c.AddAttribute(USER_PASSWORD, "wonderland");
-c.AddAttribute(NAS_IP_ADDRESS, "192.168.1.1");
-c.Send(C_ACCESS_REQUEST, [](EZRadiusClient &c, EZResult r) {
-    if (r == EZResult::OK && c.GetResponseType() == ACCESS_ACCEPT)
-        printf("welcome, %s\n", c.GetAttribute(REPLY_MESSAGE).strValue.c_str());
+EZRadiusClient client(&reactor, settings);
+client.AddAttribute(USER_NAME, "alice");
+client.AddAttribute(USER_PASSWORD, "wonderland");
+client.AddAttribute(NAS_IP_ADDRESS, "192.168.1.1");
+
+client.Send(C_ACCESS_REQUEST, [](EZRadiusClient &c, EZResult result) {
+    if (result == EZResult::OK && c.GetResponseType() == ACCESS_ACCEPT) {
+        // Authentication accepted.
+    }
 });
+
 reactor.run(stop);
 ```
 
-`EZResult`: `OK`, `TIMEOUT`, `DNS_FAILED`, `SEND_FAILED`, `CANCELED`. One object = one request; call `Reset()` to build another.
+`EZResult` includes `OK`, `TIMEOUT`, `DNS_FAILED`, `SEND_FAILED`, and `CANCELED`. One client object handles one request at a time; call `Reset()` to build another request.
 
 ### Blocking client
 
 ```cpp
-EZRadiusSyncClient c(settings);               // no reactor needed
-c.AddAttribute(USER_NAME, "alice");
-c.AddAttribute(USER_PASSWORD, "wonderland");
-if (c.Send(C_ACCESS_REQUEST) == EZResult::OK && c.GetResponseType() == ACCESS_ACCEPT) { /* ... */ }
+EZRadiusSyncClient client(settings);
+client.AddAttribute(USER_NAME, "alice");
+client.AddAttribute(USER_PASSWORD, "wonderland");
+
+if (client.Send(C_ACCESS_REQUEST) == EZResult::OK &&
+    client.GetResponseType() == ACCESS_ACCEPT) {
+    // Authentication accepted.
+}
 ```
 
 ### Accounting
 
 ```cpp
-EZRadiusClient acct(&reactor, s);
-acct.AddAttribute(ACCT_STATUS_TYPE, (int)RADIUSAcctStatusType::START);
-acct.AddAttribute(USER_NAME, "alice");
-acct.AddAttribute(ACCT_SESSION_ID, "session-1");
-acct.AddAttribute(FRAMED_IP_ADDRESS, "10.0.0.5");
-acct.Send(C_ACCOUNTING_REQUEST, [](EZRadiusClient &c, EZResult r) { /* ACCOUNTING_RESPONSE */ });
+EZRadiusClient accounting(&reactor, settings);
+accounting.AddAttribute(ACCT_STATUS_TYPE,
+                        (int)RADIUSAcctStatusType::START);
+accounting.AddAttribute(USER_NAME, "alice");
+accounting.AddAttribute(ACCT_SESSION_ID, "session-1");
+accounting.AddAttribute(FRAMED_IP_ADDRESS, "10.0.0.5");
+
+accounting.Send(C_ACCOUNTING_REQUEST,
+    [](EZRadiusClient &c, EZResult result) {
+        // Check result and Accounting-Response.
+    });
 ```
 
-### MS-CHAPv2 login (client)
+### MS-CHAPv2 client
 
 ```cpp
-c.AddMSCHAPv2("alice", "wonderland");          // adds User-Name, MS-CHAP-Challenge, MS-CHAP2-Response
-c.Send(C_ACCESS_REQUEST, [](EZRadiusClient &c, EZResult r) {
-    if (r == EZResult::OK && c.GetResponseType() == ACCESS_ACCEPT && c.MSCHAPv2ServerVerified()) {
+client.AddMSCHAPv2("alice", "wonderland");
+client.Send(C_ACCESS_REQUEST, [](EZRadiusClient &c, EZResult result) {
+    if (result == EZResult::OK &&
+        c.GetResponseType() == ACCESS_ACCEPT &&
+        c.MSCHAPv2ServerVerified()) {
         uint8_t sendKey[16], recvKey[16];
-        c.GetMPPEKeys(sendKey, recvKey);       // decrypted MS-MPPE-Send/Recv-Key
+        c.GetMPPEKeys(sendKey, recvKey);
     }
 });
 ```
@@ -194,85 +246,111 @@ c.Send(C_ACCESS_REQUEST, [](EZRadiusClient &c, EZResult r) {
 
 ```cpp
 EZRadiusServer server(&reactor);
-server.RASList()->AddRAS("nas-secret", "10.0.0.1");        // IPv4 or IPv6, one secret per NAS
-server.setBindAddress("::");                                // optional: dual stack
-server.SeRequestCallback([](RADIUSPacketTypeCodes type, RadiusPacket &req,
-                            EZRadiusClientIdentify &from, EZRadiusServer *, void *) {
-    EZResponse resp;
-    if (type == ACCESS_REQUEST) {
-        resp.AddAttribute(SERVICE_TYPE, 2);                           // Framed
-        resp.AddAttribute(ACCT_INTERIM_INTERVAL, 300);
-        resp.AddVendorAttribute(14988, 8, "10M/10M");                 // MikroTik Rate-Limit
-        resp.Send(ACCESS_ACCEPT, &from);
-    } else if (type == ACCOUNTING_REQUEST) {
-        resp.Send(ACCOUNTING_RESPONSE, &from);
-    }
-}, nullptr);
+server.RASList()->AddRAS("nas-secret", "10.0.0.1");
+server.setBindAddress("::"); // Optional dual-stack bind.
+
+server.SeRequestCallback(
+    [](RADIUSPacketTypeCodes type, RadiusPacket &request,
+       EZRadiusClientIdentify &from, EZRadiusServer *, void *) {
+        EZResponse response;
+
+        if (type == ACCESS_REQUEST) {
+            response.AddAttribute(SERVICE_TYPE, 2);
+            response.AddAttribute(ACCT_INTERIM_INTERVAL, 300);
+            response.AddVendorAttribute(14988, 8, "10M/10M");
+            response.Send(ACCESS_ACCEPT, &from);
+        } else if (type == ACCOUNTING_REQUEST) {
+            response.Send(ACCOUNTING_RESPONSE, &from);
+        }
+    }, nullptr);
+
 server.Start();
 ```
 
-PAP passwords are available with `req.getAttribute(USER_PASSWORD).strValue` (decrypted with the NAS secret). CHAP: `req.getAttribute(CHAP_PASSWORD)` (identifier in `intValue`, response in `strValue`) and `CHAP_CHALLENGE` (or the Request Authenticator when absent); the check is `MD5(id + password + challenge)`.
+PAP passwords can be read from `request.getAttribute(USER_PASSWORD).strValue` after decryption with the NAS shared secret. For CHAP, inspect `CHAP_PASSWORD` and `CHAP_CHALLENGE`; when the challenge attribute is absent, the Request Authenticator is used as the challenge.
 
-### MS-CHAPv2 verification (server)
+### MS-CHAPv2 server verification
 
 ```cpp
-switch (EZMSCHAP::Detect(req)) {
+switch (EZMSCHAP::Detect(request)) {
 case EZMSCHAP::V2: {
-    EZMSCHAPv2Result r;
-    if (EZMSCHAP::VerifyV2(req, plainPassword, r)) {        // or VerifyV2WithNtHash(req, ntHash, r)
-        resp.AddMSCHAPv2Result(r);                           // MS-CHAP2-Success + MS-MPPE-Send/Recv-Key
-        resp.Send(ACCESS_ACCEPT, &from);
+    EZMSCHAPv2Result result;
+    if (EZMSCHAP::VerifyV2(request, plainPassword, result)) {
+        response.AddMSCHAPv2Result(result);
+        response.Send(ACCESS_ACCEPT, &from);
     } else {
-        resp.AddMSCHAPError(0);                              // E=691
-        resp.Send(ACCESS_REJECT, &from);
+        response.AddMSCHAPError(0); // E=691
+        response.Send(ACCESS_REJECT, &from);
     }
-    break; }
-case EZMSCHAP::V1: /* EZMSCHAP::VerifyV1(...) */ break;
-default: break;
+    break;
+}
+case EZMSCHAP::V1:
+    // EZMSCHAP::VerifyV1(...)
+    break;
+default:
+    break;
 }
 ```
 
-MS-CHAP needs the plain-text password or the NT hash (`EZMSCHAP::NtPasswordHash`) of the user: it cannot be verified against bcrypt / PBKDF2 hashes. Store the NT hash if you need MS-CHAP (PPTP / L2TP / SSTP on MikroTik).
+MS-CHAP verification requires the plain-text password or the user's NT hash (`EZMSCHAP::NtPasswordHash`). It cannot be verified against bcrypt or PBKDF2 password hashes. Applications that need MS-CHAP must store an appropriate NT hash or otherwise obtain the plain-text password.
 
-### CoA / Disconnect: listener
+### CoA / Disconnect listener
 
 ```cpp
-EZClientSettings cs; cs.Host = "10.0.0.2"; cs.Secret = "secret"; cs.CoAPort = 3799;   // Host / RAS_IP: allowed senders
-EZCoA coa(&reactor, cs);
-coa.SetGetRequests([](RADIUSPacketTypeCodes type, RadiusPacket &req, EZResponse &resp, void *) {
-    // type is DISCONNECT_REQUEST or COA_REQUEST
-    return type == DISCONNECT_REQUEST ? DISCONNECT_ACK : COA_NAK;
-}, nullptr);
+EZClientSettings settings;
+settings.Host = "10.0.0.2";
+settings.Secret = "secret";
+settings.CoAPort = 3799;
+
+EZCoA coa(&reactor, settings);
+coa.SetGetRequests(
+    [](RADIUSPacketTypeCodes type, RadiusPacket &request,
+       EZResponse &response, void *) {
+        return type == DISCONNECT_REQUEST
+            ? DISCONNECT_ACK
+            : COA_NAK;
+    }, nullptr);
+
 coa.Start();
 ```
 
-### CoA / Disconnect: sender (kick a user)
+### CoA / Disconnect sender
 
 ```cpp
-EZClientSettings ns; ns.Host = "10.0.0.1"; ns.Secret = "nas-secret"; ns.CoAPort = 3799;   // Host = the NAS
-EZRadiusClient kick(&reactor, ns);
+EZClientSettings nas;
+nas.Host = "10.0.0.1";
+nas.Secret = "nas-secret";
+nas.CoAPort = 3799;
+
+EZRadiusClient kick(&reactor, nas);
 kick.AddAttribute(USER_NAME, "alice");
 kick.AddAttribute(ACCT_SESSION_ID, "session-1");
-kick.Send(C_DISCONNECT_REQUEST, [](EZRadiusClient &c, EZResult r) {
-    // c.GetResponseType() == DISCONNECT_ACK or DISCONNECT_NAK (Error-Cause is attribute 101)
-});
+
+kick.Send(C_DISCONNECT_REQUEST,
+    [](EZRadiusClient &c, EZResult result) {
+        // Check DISCONNECT_ACK / DISCONNECT_NAK and Error-Cause (101).
+    });
 ```
 
 ### Status-Server
 
 ```cpp
-client.Send(C_STATUS_SERVER, ...);     // health check; the library server answers it automatically
+client.Send(C_STATUS_SERVER, ...);
 ```
+
+The library server can answer Status-Server requests automatically.
 
 ### Vendor-specific attributes
 
 ```cpp
-resp.AddVendorAttribute(14988, 8, "10M/10M");                     // text
-resp.AddVendorAttribute(vendorId, type, data, length);            // binary
-// reading: AttrValue v = req.getAttribute(VENDOR_SPECIFIC);       // intValue = Vendor-Id, strValue = sub-attributes
+response.AddVendorAttribute(14988, 8, "10M/10M"); // Text payload.
+response.AddVendorAttribute(vendorId, type, data, length); // Binary payload.
+
+// Read the Vendor-Specific attribute container:
+AttrValue value = request.getAttribute(VENDOR_SPECIFIC);
 ```
 
-More complete programs are in [`example/`](example/): `server.cpp`, `client.cpp`, `client_sync.cpp`, `coa.cpp`.
+More complete programs are available in [`example/`](example/), including server, asynchronous client, blocking client, and CoA examples.
 
 ---
 
@@ -280,187 +358,170 @@ More complete programs are in [`example/`](example/): `server.cpp`, `client.cpp`
 
 | Class | Purpose |
 |---|---|
-| `EZClientSettings` | Host, Secret, ports (`AuthenticationPort` 1812, `AccountingPort` 1813, `CoAPort` 3799), `TimeOut` (ms), `RetryCount`, `NAS_IP`, `RAS_IP`, `UseMessageAuthenticator`, `RequireMessageAuthenticator` |
-| `EZRadiusClient` | Asynchronous client. `AddAttribute`, `AddVendorAttribute`, `AddMSCHAPv1/v2`, `Send(type, callback)`, `Cancel`, `Reset`, response getters, `MSCHAPv2ServerVerified`, `GetMPPEKeys` |
-| `EZRadiusSyncClient` | Blocking client with the same request-building API; `Send(type)` returns an `EZResult` |
-| `EZRadiusServer` | UDP server. `RASList()`, `SeRequestCallback`, `Start/Stop`, `setAuthenticationPort/AccountingPort/BindAddress`, `setRequireMessageAuthenticator`, `setDuplicateWindow`, `setAutoStatusServer` |
-| `EZRASList` / `RASItem` | Allowed NAS addresses (IPv4 / IPv6) and their secrets |
-| `EZRadiusClientIdentify` | Who sent the request: peer address, socket, ID, authenticator, RAS; passed to the callback and to `EZResponse::Send` |
-| `EZResponse` | Builds and sends a response (attributes, VSA, MS-CHAPv2 success/error, MPPE keys) |
-| `EZCoA` | RFC 5176 listener |
-| `EZMSCHAP` | MS-CHAPv1/v2 primitives, verification, MPPE keys (needs BoringSSL) |
-| `EZCrypto` | BoringSSL wrapper: MD4, MD5, SHA-1, SHA-256, HMAC, DES block, random, constant-time compare |
-| `RadiusPacket`, `RadiusAttribute`, `RadiusSecret` | Low-level packet / attribute / secret classes (parser, authenticators, Message-Authenticator) |
+| `EZClientSettings` | Host, shared secret, Authentication / Accounting / CoA ports, timeout, retry count, NAS/RAS addresses, Message-Authenticator options |
+| `EZRadiusClient` | Asynchronous client: `AddAttribute`, `AddVendorAttribute`, `AddMSCHAPv1/v2`, `Send`, `Cancel`, `Reset`, response getters, MS-CHAPv2 verification, MPPE key retrieval |
+| `EZRadiusSyncClient` | Blocking client wrapper; `Send(type)` returns an `EZResult` |
+| `EZRadiusServer` | UDP Authentication and Accounting server; NAS list, request callback, start/stop, bind and port configuration, Message-Authenticator and duplicate-detection settings |
+| `EZRASList` / `RASItem` | Allowed NAS addresses and shared secrets |
+| `EZRadiusClientIdentify` | Request origin information passed to the server callback and response sender |
+| `EZResponse` | Builds and sends RADIUS responses, including attributes, VSA, MS-CHAPv2 success/error, and MPPE keys |
+| `EZCoA` | RFC 5176 Dynamic Authorization listener |
+| `EZMSCHAP` | MS-CHAPv1/v2 helpers, verification, and MPPE key derivation (requires BoringSSL) |
+| `EZCrypto` | BoringSSL wrapper for MD4, MD5, SHA-1, SHA-256, HMAC, DES block operations, random generation, and constant-time comparison |
+| `RadiusPacket`, `RadiusAttribute`, `RadiusSecret` | Low-level packet, attribute, and shared-secret functionality |
 
-Packet codes handled: Access-Request/Accept/Reject/Challenge (1,2,3,11), Accounting-Request/Response (4,5), Status-Server (12), Disconnect-Request/ACK/NAK (40–42), CoA-Request/ACK/NAK (43–45). Other codes are parsed and passed to your callback as received.
+Supported packet codes include Access-Request / Accept / Reject / Challenge (1, 2, 3, 11), Accounting-Request / Response (4, 5), Status-Server (12), Disconnect-Request / ACK / NAK (40–42), and CoA-Request / ACK / NAK (43–45).
 
-`EZClientSettings` Message-Authenticator behavior: `UseMessageAuthenticator` (default on) adds and signs it in every Access-Request; `RequireMessageAuthenticator` drops Access responses without a valid one. The server verifies it whenever present, requires it for Status-Server, and for Access-Request when `setRequireMessageAuthenticator(true)`.
+Message-Authenticator behavior is configurable. By default, clients add and sign Message-Authenticator on Access-Requests. The client can require a valid Message-Authenticator in responses. The server verifies it when present, requires it for Status-Server, and can be configured to require it for Access-Requests.
 
 ---
 
 ## Supported attributes
 
-Attribute numbers are available as enum constants (`USER_NAME`, `NAS_IP_ADDRESS`, ...). Any other attribute number can be used by casting (`(RADIUSAttribute)95`); it is then treated as a string / octets attribute, except NAS-IPv6-Address (95), which `AddAttribute` encodes from an IPv6 literal.
+Attribute numbers are available as enum constants (`USER_NAME`, `NAS_IP_ADDRESS`, and others). Other attribute numbers can be supplied by casting to `RADIUSAttribute`; generic values are handled as string/octet data, except for the documented `NAS-IPv6-Address` special case.
 
-| # | Name | Constant | Value type | Defined in |
-|---|---|---|---|---|
-| 1 | User-Name | `USER_NAME` | string / octets | RFC 2865 |
-| 2 | User-Password | `USER_PASSWORD` | password (PAP, encrypted) | RFC 2865 |
-| 3 | CHAP-Password | `CHAP_PASSWORD` | CHAP (id + 16 byte response) | RFC 2865 |
-| 4 | NAS-IP-Address | `NAS_IP_ADDRESS` | IPv4 address | RFC 2865 |
-| 5 | NAS-Port | `NAS_PORT` | integer (32 bit) | RFC 2865 |
-| 6 | Service-Type | `SERVICE_TYPE` | integer (32 bit) | RFC 2865 |
-| 7 | Framed-Protocol | `FRAMED_PROTOCOL` | integer (32 bit) | RFC 2865 |
-| 8 | Framed-IP-Address | `FRAMED_IP_ADDRESS` | IPv4 address | RFC 2865 |
-| 9 | Framed-IP-Netmask | `FRAMED_IP_NETMASK` | IPv4 address | RFC 2865 |
-| 10 | Framed-Routing | `FRAMED_ROUTING` | integer (32 bit) | RFC 2865 |
-| 11 | Filter-Id | `FILTER_ID` | string / octets | RFC 2865 |
-| 12 | Framed-MTU | `FRAMED_MTU` | integer (32 bit) | RFC 2865 |
-| 13 | Framed-Compression | `FRAMED_COMPRESSION` | integer (32 bit) | RFC 2865 |
-| 14 | Login-IP-Host | `LOGIN_IP_HOST` | IPv4 address | RFC 2865 |
-| 15 | Login-Service | `LOGIN_SERVICE` | integer (32 bit) | RFC 2865 |
-| 16 | Login-TCP-Port | `LOGIN_TCP_PORT` | integer (32 bit) | RFC 2865 |
-| 17 | Old-Password (reserved) | `OLD_PASSWORD` | string / octets | RFC 2865 |
-| 18 | Reply-Message | `REPLY_MESSAGE` | string / octets | RFC 2865 |
-| 19 | Callback-Number | `CALLBACK_NUMBER` | string / octets | RFC 2865 |
-| 20 | Callback-Id | `CALLBACK_ID` | string / octets | RFC 2865 |
-| 22 | Framed-Route | `FRAMED_ROUTE` | string / octets | RFC 2865 |
-| 23 | Framed-IPX-Network | `FRAMED_IPX_NETWORK` | integer (32 bit) | RFC 2865 |
-| 24 | State | `STATE` | string / octets | RFC 2865 |
-| 25 | Class | `CLASS` | string / octets | RFC 2865 |
-| 26 | Vendor-Specific | `VENDOR_SPECIFIC` | vendor-specific | RFC 2865 |
-| 27 | Session-Timeout | `SESSION_TIMEOUT` | integer (32 bit) | RFC 2865 |
-| 28 | Idle-Timeout | `IDLE_TIMEOUT` | integer (32 bit) | RFC 2865 |
-| 29 | Termination-Action | `TERMINATION_ACTION` | integer (32 bit) | RFC 2865 |
-| 30 | Called-Station-Id | `CALLED_STATION_ID` | string / octets | RFC 2865 |
-| 31 | Calling-Station-Id | `CALLING_STATION_ID` | string / octets | RFC 2865 |
-| 32 | NAS-Identifier | `NAS_IDENTIFIER` | string / octets | RFC 2865 |
-| 33 | Proxy-State | `PROXY_STATE` | string / octets | RFC 2865 |
-| 34 | Login-LAT-Service | `LOGIN_LAT_SERVICE` | string / octets | RFC 2865 |
-| 35 | Login-LAT-Node | `LOGIN_LAT_NODE` | string / octets | RFC 2865 |
-| 36 | Login-LAT-Group | `LOGIN_LAT_GROUP` | string / octets | RFC 2865 |
-| 37 | Framed-AppleTalk-Link | `FRAMED_APPLETALK_LINK` | integer (32 bit) | RFC 2865 |
-| 38 | Framed-AppleTalk-Network | `FRAMED_APPLETALK_NETWORK` | integer (32 bit) | RFC 2865 |
-| 39 | Framed-AppleTalk-Zone | `FRAMED_APPLETALK_ZONE` | string / octets | RFC 2865 |
-| 40 | Acct-Status-Type | `ACCT_STATUS_TYPE` | integer (32 bit) | RFC 2866 |
-| 41 | Acct-Delay-Time | `ACCT_DELAY_TIME` | integer (32 bit) | RFC 2866 |
-| 42 | Acct-Input-Octets | `ACCT_INPUT_OCTETS` | integer (32 bit) | RFC 2866 |
-| 43 | Acct-Output-Octets | `ACCT_OUTPUT_OCTETS` | integer (32 bit) | RFC 2866 |
-| 44 | Acct-Session-Id | `ACCT_SESSION_ID` | string / octets | RFC 2866 |
-| 45 | Acct-Authentic | `ACCT_AUTHENTIC` | integer (32 bit) | RFC 2866 |
-| 46 | Acct-Session-Time | `ACCT_SESSION_TIME` | integer (32 bit) | RFC 2866 |
-| 47 | Acct-Input-Packets | `ACCT_INPUT_PACKETS` | integer (32 bit) | RFC 2866 |
-| 48 | Acct-Output-Packets | `ACCT_OUTPUT_PACKETS` | integer (32 bit) | RFC 2866 |
-| 49 | Acct-Terminate-Cause | `ACCT_TERMINATE_CAUSE` | integer (32 bit) | RFC 2866 |
-| 50 | Acct-Multi-Session-Id | `ACCT_MULTI_SESSION_ID` | string / octets | RFC 2866 |
-| 51 | Acct-Link-Count | `ACCT_LINK_COUNT` | integer (32 bit) | RFC 2866 |
-| 52 | Acct-Input-Gigawords | `ACCT_INPUT_GIGAWORDS` | integer (32 bit) | RFC 2869 |
-| 53 | Acct-Output-Gigawords | `ACCT_OUTPUT_GIGAWORDS` | integer (32 bit) | RFC 2869 |
-| 55 | Event-Timestamp | `EVENT_TIMESTAMP` | integer (32 bit) | RFC 2869 |
-| 56 | Egress-VLANID | `EGRESS_VLANID` | integer (32 bit) | RFC 4675 |
-| 57 | Ingress-Filters | `INGRESS_FILTERS` | integer (32 bit) | RFC 4675 |
-| 58 | Egress-VLAN-Name | `EGRESS_VLAN_NAME` | string / octets | RFC 4675 |
-| 59 | User-Priority-Table | `USER_PRIORITY_TABLE` | string / octets | RFC 4675 |
-| 60 | CHAP-Challenge | `CHAP_CHALLENGE` | string / octets | RFC 2865 |
-| 61 | NAS-Port-Type | `NAS_PORT_TYPE` | integer (32 bit) | RFC 2865 |
-| 62 | Port-Limit | `PORT_LIMIT` | integer (32 bit) | RFC 2865 |
-| 63 | Login-LAT-Port | `LOGIN_LAT_PORT` | string / octets | RFC 2865 |
-| 64 | Tunnel-Type | `TUNNEL_TYPE` | integer (32 bit) | RFC 2868 |
-| 65 | Tunnel-Medium-Type | `TUNNEL_MEDIUM_TYPE` | integer (32 bit) | RFC 2868 |
-| 66 | Tunnel-Client-Endpoint | `TUNNEL_CLIENT_ENDPOINT` | string / octets | RFC 2868 |
-| 67 | Tunnel-Server-Endpoint | `TUNNEL_SERVER_ENDPOINT` | string / octets | RFC 2868 |
-| 68 | Acct-Tunnel-Connection | `ACCT_TUNNEL_CONNECTION` | string / octets | RFC 2867 |
-| 69 | Tunnel-Password | `TUNNEL_PASSWORD` | string / octets | RFC 2868 |
-| 70 | ARAP-Password | `ARAP_PASSWORD` | string / octets | RFC 2869 |
-| 71 | ARAP-Features | `ARAP_FEATURES` | string / octets | RFC 2869 |
-| 72 | ARAP-Zone-Access | `ARAP_ZONE_ACCESS` | integer (32 bit) | RFC 2869 |
-| 73 | ARAP-Security | `ARAP_SECURITY` | integer (32 bit) | RFC 2869 |
-| 74 | ARAP-Security-Data | `ARAP_SECURITY_DATA` | string / octets | RFC 2869 |
-| 75 | Password-Retry | `PASSWORD_RETRY` | integer (32 bit) | RFC 2869 |
-| 76 | Prompt | `PROMPT` | integer (32 bit) | RFC 2869 |
-| 77 | Connect-Info | `CONNECT_INFO` | string / octets | RFC 2869 |
-| 78 | Configuration-Token | `CONFIGURATION_TOKEN` | string / octets | RFC 2869 |
-| 79 | EAP-Message | `EAP_MESSAGE` | string / octets | RFC 3579 |
-| 80 | Message-Authenticator | `MESSAGE_AUTHENTICATOR` | octets (16), added and signed automatically | RFC 3579 |
-| 81 | Tunnel-Private-Group-Id | `TUNNEL_PRIVATE_GROUP_ID` | string / octets | RFC 2868 |
-| 82 | Tunnel-Assignment-Id | `TUNNEL_ASSIGNMENT_ID` | string / octets | RFC 2868 |
-| 83 | Tunnel-Preference | `TUNNEL_PREFERENCE` | integer (32 bit) | RFC 2868 |
-| 84 | ARAP-Challenge-Response | `ARAP_CHALLENGE_RESPONSE` | string / octets | RFC 2869 |
-| 85 | Acct-Interim-Interval | `ACCT_INTERIM_INTERVAL` | integer (32 bit) | RFC 2869 |
+### Attribute dictionary model
 
-**Type handling.** *integer*: 32-bit unsigned (`AddAttribute(type, uint32_t)`). *IPv4 address*: dotted text in, dotted text out (`inet_pton` / `inet_ntop`, invalid text is rejected). *string / octets*: up to 253 bytes, binary safe. *password*: PAP, encrypted on the wire with the shared secret and the Request Authenticator (up to 128 bytes, padded to 16). *CHAP*: identifier plus 16-byte response. Setters validate every value and return `false` instead of adding a broken attribute.
+Attribute identifiers and built-in constants are defined in the library headers. libEZRadius does **not** currently provide a FreeRADIUS-style runtime dictionary engine:
 
-**Special attributes**
+- It cannot load standard or vendor dictionaries from files or memory buffers.
+- It does not provide runtime name-to-number, number-to-name, or symbolic OID lookup.
+- It does not provide a general runtime API for registering new typed attribute definitions.
+- For attributes without a dedicated built-in definition, the generic path treats values as string/octet data, subject to the packet format and setter validation.
+- Vendor-Specific payloads can be added using vendor ID, vendor type, and raw data. Vendor dictionaries and symbolic vendor-attribute lookup remain the application's responsibility.
+
+This is separate from support for the RADIUS Vendor-Specific attribute container (type 26) itself.
+
+### Built-in attributes
+
+The built-in constants cover common attributes from RFC 2865, RFC 2866, RFC 2868, RFC 2869, and RFC 4675, including:
+
+| Attribute number | Name | Constant |
+|---:|---|---|
+| 1 | User-Name | `USER_NAME` |
+| 2 | User-Password | `USER_PASSWORD` |
+| 3 | CHAP-Password | `CHAP_PASSWORD` |
+| 4 | NAS-IP-Address | `NAS_IP_ADDRESS` |
+| 5 | NAS-Port | `NAS_PORT` |
+| 6 | Service-Type | `SERVICE_TYPE` |
+| 7 | Framed-Protocol | `FRAMED_PROTOCOL` |
+| 8 | Framed-IP-Address | `FRAMED_IP_ADDRESS` |
+| 9 | Framed-IP-Netmask | `FRAMED_IP_NETMASK` |
+| 11 | Filter-Id | `FILTER_ID` |
+| 18 | Reply-Message | `REPLY_MESSAGE` |
+| 24 | State | `STATE` |
+| 25 | Class | `CLASS` |
+| 26 | Vendor-Specific | `VENDOR_SPECIFIC` |
+| 27 | Session-Timeout | `SESSION_TIMEOUT` |
+| 28 | Idle-Timeout | `IDLE_TIMEOUT` |
+| 30 | Called-Station-Id | `CALLED_STATION_ID` |
+| 31 | Calling-Station-Id | `CALLING_STATION_ID` |
+| 32 | NAS-Identifier | `NAS_IDENTIFIER` |
+| 33 | Proxy-State | `PROXY_STATE` |
+| 40 | Acct-Status-Type | `ACCT_STATUS_TYPE` |
+| 41 | Acct-Delay-Time | `ACCT_DELAY_TIME` |
+| 42 | Acct-Input-Octets | `ACCT_INPUT_OCTETS` |
+| 43 | Acct-Output-Octets | `ACCT_OUTPUT_OCTETS` |
+| 44 | Acct-Session-Id | `ACCT_SESSION_ID` |
+| 45 | Acct-Authentic | `ACCT_AUTHENTIC` |
+| 46 | Acct-Session-Time | `ACCT_SESSION_TIME` |
+| 47 | Acct-Input-Packets | `ACCT_INPUT_PACKETS` |
+| 48 | Acct-Output-Packets | `ACCT_OUTPUT_PACKETS` |
+| 49 | Acct-Terminate-Cause | `ACCT_TERMINATE_CAUSE` |
+| 50 | Acct-Multi-Session-Id | `ACCT_MULTI_SESSION_ID` |
+| 51 | Acct-Link-Count | `ACCT_LINK_COUNT` |
+| 52 | Acct-Input-Gigawords | `ACCT_INPUT_GIGAWORDS` |
+| 53 | Acct-Output-Gigawords | `ACCT_OUTPUT_GIGAWORDS` |
+| 55 | Event-Timestamp | `EVENT_TIMESTAMP` |
+| 56–59 | VLAN / priority attributes | `EGRESS_VLANID`, `INGRESS_FILTERS`, `EGRESS_VLAN_NAME`, `USER_PRIORITY_TABLE` |
+| 60 | CHAP-Challenge | `CHAP_CHALLENGE` |
+| 61 | NAS-Port-Type | `NAS_PORT_TYPE` |
+| 62 | Port-Limit | `PORT_LIMIT` |
+| 63 | Login-LAT-Port | `LOGIN_LAT_PORT` |
+| 64–67 | Tunnel attributes | `TUNNEL_TYPE`, `TUNNEL_MEDIUM_TYPE`, `TUNNEL_CLIENT_ENDPOINT`, `TUNNEL_SERVER_ENDPOINT` |
+| 68 | Acct-Tunnel-Connection | `ACCT_TUNNEL_CONNECTION` |
+| 69 | Tunnel-Password | `TUNNEL_PASSWORD` |
+| 70–78 | ARAP and related attributes | Corresponding `ARAP_*`, `PASSWORD_RETRY`, `PROMPT`, `CONNECT_INFO`, `CONFIGURATION_TOKEN` constants |
+| 79 | EAP-Message | `EAP_MESSAGE` |
+| 80 | Message-Authenticator | `MESSAGE_AUTHENTICATOR` |
+| 81–83 | Tunnel attributes | `TUNNEL_PRIVATE_GROUP_ID`, `TUNNEL_ASSIGNMENT_ID`, `TUNNEL_PREFERENCE` |
+| 84 | ARAP-Challenge-Response | `ARAP_CHALLENGE_RESPONSE` |
+| 85 | Acct-Interim-Interval | `ACCT_INTERIM_INTERVAL` |
+
+### Value handling
+
+- **Integer:** 32-bit unsigned (`AddAttribute(type, uint32_t)`).
+- **IPv4 address:** dotted text input/output; invalid text is rejected.
+- **String/octet:** up to 253 bytes; binary data is supported.
+- **PAP password:** encrypted on the wire using the shared secret and Request Authenticator; up to 128 bytes.
+- **CHAP:** identifier plus 16-byte response.
+
+Setters validate values and return `false` when an attribute cannot be added in the requested form.
+
+### Special attributes
 
 | Attribute | Handling |
 |---|---|
-| Message-Authenticator (80) | Added and signed by the library (client: `UseMessageAuthenticator`; server responses: when the request had one); cannot be added manually |
+| Message-Authenticator (80) | Generated and verified by the library according to client/server configuration; cannot be added manually through the normal attribute setter |
 | Proxy-State (33) | Copied from request to response automatically |
-| Acct-Input/Output-Gigawords (52/53) | Typed integers; combine with Acct-*-Octets for traffic above 4 GiB |
-| Vendor-Specific (26) | `AddVendorAttribute(vendorId, type, ...)`; reading through `getAttribute(VENDOR_SPECIFIC)` / `getAttributes(...)` |
+| Acct-Input/Output-Gigawords (52/53) | Typed integers; combine with Acct-*-Octets for traffic counters above 4 GiB |
+| Vendor-Specific (26) | Add with `AddVendorAttribute(vendorId, type, ...)`; generic VSA payload access is available through attribute accessors |
 
-**Microsoft vendor attributes (vendor 311, RFC 2548), with BoringSSL**
+### Microsoft vendor attributes (Vendor ID 311, RFC 2548)
 
-| # | Name | Handling |
-|---|---|---|
-| 1 | MS-CHAP-Response | MS-CHAPv1; generated by `AddMSCHAPv1`, verified by `EZMSCHAP::VerifyV1` |
-| 2 | MS-CHAP-Error | `EZResponse::AddMSCHAPError` |
-| 7 / 8 | MS-MPPE-Encryption-Policy / -Types | `EZResponse::AddMPPEKeys(..., policy, types)` |
-| 10 | MS-CHAP-Domain | passed through (domain prefix of the user name is ignored for the challenge hash) |
-| 11 | MS-CHAP-Challenge | generated by `AddMSCHAPv1/v2`; the Request Authenticator is used when it is absent |
-| 16 / 17 | MS-MPPE-Send-Key / -Recv-Key | derived (RFC 3079) and encrypted (RFC 2548) by `EZResponse`; decrypted by `EZRadiusClient::GetMPPEKeys` |
-| 25 | MS-CHAP2-Response | generated by `AddMSCHAPv2`, verified by `EZMSCHAP::VerifyV2` |
-| 26 | MS-CHAP2-Success | `EZResponse::AddMSCHAP2Success` / `AddMSCHAPv2Result`; checked by `MSCHAPv2ServerVerified` |
+With BoringSSL enabled, the library supports the MS-CHAP and MPPE attributes used by its helpers, including MS-CHAP-Response, MS-CHAP-Error, MS-MPPE-Encryption-Policy / Types, MS-CHAP-Challenge, MS-MPPE-Send-Key / Recv-Key, MS-CHAP2-Response, and MS-CHAP2-Success.
 
 ---
 
 ## Security notes
 
-- **Use Message-Authenticator.** It is on by default for clients. Enable `setRequireMessageAuthenticator(true)` on servers whose NAS devices are patched against BlastRADIUS.
-- **MD5 is part of the protocol.** RADIUS over UDP provides authentication and integrity with a shared secret, but weak confidentiality. Use long random shared secrets (up to 256 bytes are accepted) and keep RADIUS traffic on trusted networks or inside IPsec / TLS tunnels (RadSec is not implemented).
-- **Passwords:** the library never logs passwords (`RadiusAttribute::setDumpPasswords(true)` is a debugging switch) and wipes temporary copies.
-- **MS-CHAPv1 and MS-CHAPv2 are cryptographically weak** (DES based, equivalent to a single DES key search). Enable them only for protocols that require them (PPTP / SSTP / some L2TP setups).
-- **Duplicate detection** keeps recent requests in memory (default window 30 s, at most 8192 entries) and only for requests that already passed authentication.
-- Unknown senders and invalid packets are dropped without any answer.
+- **Use Message-Authenticator.** It is enabled by default for client Access-Requests. On servers, enable `setRequireMessageAuthenticator(true)` when the NAS devices are patched and support the requirement.
+- **MD5 is part of the RADIUS protocol.** RADIUS over UDP provides authentication/integrity mechanisms based on a shared secret but does not provide strong confidentiality. Use long random shared secrets and keep RADIUS traffic on trusted networks or protected tunnels.
+- **RadSec is not implemented.** If transport confidentiality is required, protect traffic externally (for example with IPsec) until a TLS-based RADIUS transport is available.
+- **Passwords:** password logging is disabled by default; `RadiusAttribute::setDumpPasswords(true)` is a debugging switch and should be used carefully.
+- **MS-CHAPv1 and MS-CHAPv2 are cryptographically weak.** They rely on legacy DES-based constructions. Enable them only when required by the access protocol.
+- **Duplicate detection** stores recent authenticated requests in memory. The default window and cache capacity are implementation settings.
+- Unknown senders and invalid packets are dropped without a response.
 
 ---
 
 ## Testing
 
-| Test | What it covers |
-|---|---|
-| `test_packet` | Parser limits and malformed packets, PAP round trip, RFC 2202 / RFC 2865 test vectors, authenticators, Message-Authenticator, VSA |
-| `test_loopback` | Server, clients and CoA on one reactor: PAP, CHAP, accounting, Status-Server, Proxy-State, duplicate requests, timeouts, cancel, wrong secret, unknown NAS, Disconnect / CoA sender and listener, IPv6 (skipped when the host has no IPv6 loopback) |
-| `test_mschap` | RFC 2759 / RFC 3079 vectors, MS-CHAPv1 / v2 end to end, MPPE key round trip, blocking client (success, reject, timeout, DNS, `Reset()`) |
-| `fuzz_packet` | Mutation fuzzing of the packet parser |
-| `fuzz/fuzz_libfuzzer.cpp` | libFuzzer target (`-DEZRADIUS_BUILD_FUZZER=ON`, clang) |
+The repository includes tests for packet parsing, malformed packets, PAP and authenticator vectors, Message-Authenticator, VSA, loopback client/server behavior, Accounting, CoA, Status-Server, IPv6, timeout/cancel behavior, MS-CHAPv1/v2, and MPPE key derivation. A libFuzzer target is available for packet-parser fuzzing.
 
 ```sh
-cmake -S . -B build -DEZRADIUS_SANITIZE=ON ... && cmake --build build && (cd build && ctest --output-on-failure)
+cmake -S . -B build -DEZRADIUS_SANITIZE=ON
+cmake --build build
+(cd build && ctest --output-on-failure)
 ```
+
+To build the libFuzzer target, enable `EZRADIUS_BUILD_FUZZER` and use Clang.
 
 ---
 
 ## Limitations
 
-- Linux only (epoll, via netRector).
-- EAP (EAP-Message is carried, but no EAP methods) and EAP-TLS are not implemented yet; `EZCrypto` and the BoringSSL integration are the foundation for them.
-- RadSec (RADIUS over TLS, RFC 6614) and RADIUS over TCP are not implemented.
-- MS-CHAPv1 supports the NT response only (no LM response); MPPE keys are derived for MS-CHAPv2 only.
-- Extended attributes (RFC 6929), Tunnel-Password decryption and the IPv6 attribute set (RFC 3162 / 4818) beyond NAS-IPv6-Address are not decoded.
-- One request per client object; there is no connection / request pool.
-- Server duplicate detection and the RAS list are per process and in memory.
-- The server runs on one reactor; to use several cores, run one reactor per thread (bind with `SO_REUSEPORT` is not wired up yet).
+- Linux only (epoll through netRector).
+- EAP methods and EAP-TLS are not implemented. EAP-Message (attribute 79) is carried as an opaque attribute only.
+- RADIUS over TCP, RadSec (TLS), and RADIUS over DTLS are not implemented; the current transport is UDP.
+- There is no runtime-loadable attribute dictionary or general runtime typed-attribute registration API.
+- Extended attributes (RFC 6929), Tunnel-Password decryption, and the IPv6 attribute set (RFC 3162 / RFC 4818) beyond NAS-IPv6-Address are not decoded.
+- MS-CHAPv1 supports the NT response only; the LM response is not supported. MPPE keys are derived for MS-CHAPv2.
+- One request per client object; there is no connection/request pool.
+- Server duplicate detection and the NAS list are per-process and in memory.
+- The server runs on one reactor. To use multiple cores, run one reactor per thread; `SO_REUSEPORT` multi-reactor binding is not currently wired up.
 
 ---
 
 ## Project layout and credits
 
-```
-src/        library sources (Radius*.cpp packet core, EZ*.cpp network layer, EZMSCHAP / EZCrypto)
-example/    server, async client, blocking client, CoA listener
-tests/      unit, loopback, MS-CHAP and fuzz tests
+```text
+src/        Library sources (packet core, RADIUS attributes, crypto and network layer)
+example/    Server, asynchronous client, blocking client, and CoA examples
+tests/      Unit, loopback, MS-CHAP, and protocol tests
 fuzz/       libFuzzer target
 ```
 
-The packet core (`RadiusPacket`, `RadiusAttribute`, `RadiusSecret`, MD5) derives from the *ace-radius-linux* library by Alex Agranov (BSD license, see the file headers), rewritten and hardened here. Networking is provided by [netRector](https://github.com/crazyfull/netRector); cryptography by [BoringSSL](https://boringssl.googlesource.com/boringssl/).
+The packet core (`RadiusPacket`, `RadiusAttribute`, `RadiusSecret`, and MD5-related code) derives from the *ace-radius-linux* library by Alex Agranov; see the relevant source-file headers for its BSD license notice. Networking is provided by [netRector](https://github.com/crazyfull/netRector), and optional cryptographic functionality uses [BoringSSL](https://boringssl.googlesource.com/boringssl/).
+
+The license of this repository as a whole must be determined and documented separately; third-party notices do not by themselves define the project's license.
