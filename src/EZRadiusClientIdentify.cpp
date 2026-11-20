@@ -1,4 +1,5 @@
 #include "EZRadiusClientIdentify.h"
+#include "EZAddr.h"
 #include <arpa/inet.h>
 #include <cstring>
 
@@ -20,17 +21,21 @@ EZRadiusClientIdentify::EZRadiusClientIdentify(uint8_t ID, const struct sockaddr
 
 uint32_t EZRadiusClientIdentify::IPAddress() const
 {
-    if(m_Peer.ss_family != AF_INET)
-        return 0;
-    return ((const struct sockaddr_in*)&m_Peer)->sin_addr.s_addr;
+    if(m_Peer.ss_family == AF_INET)
+        return ((const struct sockaddr_in*)&m_Peer)->sin_addr.s_addr;
+    if(m_Peer.ss_family == AF_INET6){
+        const unsigned char *a = ((const struct sockaddr_in6*)&m_Peer)->sin6_addr.s6_addr;
+        static const unsigned char mapped[12] = {0,0,0,0,0,0,0,0,0,0,0xff,0xff};
+        if(memcmp(a, mapped, 12) == 0){
+            uint32_t ip;
+            memcpy(&ip, a + 12, 4);
+            return ip;
+        }
+    }
+    return 0;
 }
 
 std::string EZRadiusClientIdentify::IPAddressDescription() const
 {
-    char buf[INET6_ADDRSTRLEN] = {0};
-    if(m_Peer.ss_family == AF_INET)
-        inet_ntop(AF_INET, &((const struct sockaddr_in*)&m_Peer)->sin_addr, buf, sizeof(buf));
-    else if(m_Peer.ss_family == AF_INET6)
-        inet_ntop(AF_INET6, &((const struct sockaddr_in6*)&m_Peer)->sin6_addr, buf, sizeof(buf));
-    return buf;
+    return ezaddr::toString((const struct sockaddr*)&m_Peer);
 }

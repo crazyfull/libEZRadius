@@ -4,11 +4,13 @@
 #include "RadiusPacket.h"
 #include "EZRASList.h"
 #include <memory>
+#include <vector>
 #include <string>
 #include <sys/socket.h>
 #include <netinet/in.h>
 
 namespace netrector { class UDPSocket; }
+class EZDedupCache;
 
 // Who sent a request and everything that is needed to answer it:
 // peer address, the server socket the request arrived on, request ID / authenticator and the RAS.
@@ -22,6 +24,9 @@ class EZRadiusClientIdentify
     std::shared_ptr<RASItem> m_RAS;
     uint8_t m_ID = 0;
     bool m_RequestHadMA = false;
+    std::shared_ptr<EZDedupCache> m_Dedup;
+    std::string m_DedupKey;
+    std::vector<std::string> m_ProxyStates;
 
 public:
     EZRadiusClientIdentify(uint8_t ID, const struct sockaddr *peer, socklen_t peerLen,
@@ -35,7 +40,17 @@ public:
     socklen_t PeerLen() const { return m_PeerLen; }
     std::shared_ptr<RASItem> RAS() const { return m_RAS; }
 
+    // Proxy-State attributes of the request: copied into the response (RFC 2865 section 5.33)
+    const std::vector<std::string> &ProxyStates() const { return m_ProxyStates; }
+    void addProxyState(const std::string &value) { m_ProxyStates.push_back(value); }
+
+    // retransmission cache (used by EZResponse::Send to remember the answer)
+    void setDedup(std::shared_ptr<EZDedupCache> cache, const std::string &key) { m_Dedup = std::move(cache); m_DedupKey = key; }
+    const std::shared_ptr<EZDedupCache> &dedup() const { return m_Dedup; }
+    const std::string &dedupKey() const { return m_DedupKey; }
+
     // IPv4 address of the peer (network byte order), 0 when the peer is not IPv4
+    // (an IPv4-mapped IPv6 peer counts as IPv4)
     uint32_t IPAddress() const;
     std::string IPAddressDescription() const;
 

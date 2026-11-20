@@ -68,7 +68,7 @@ coa.Start();
 
 `Host` و `RAS_IP` در تنظیمات، آدرس‌های مجاز برای ارسال درخواست هستند.
 
-## قواعد استفاده
+قواعد استفاده
 
 - همه‌چیز فقط از thread مربوط به reactor استفاده شود؛ از threadهای دیگر با `reactor.post()`.
 - شیءهای client، server و CoA باید قبل از reactor (یا قبل از پایان `run()`) از بین بروند.
@@ -79,3 +79,4 @@ coa.Start();
 - `test_packet`: تست واحد (شامل بردارهای RFC 2202 و RFC 2865 بخش 7.1)
 - `test_loopback`: سرور، کلاینت و CoA روی یک reactor
 - `fuzz_packet`: fuzz ساده‌ی parser پکت
+

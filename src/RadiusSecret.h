@@ -11,7 +11,7 @@
 
 #include "Radius.h"
 
-#define D_SECRET_MAX_LENGTH           256
+constexpr int D_SECRET_MAX_LENGTH = 256;
 
 
 /**

@@ -2,6 +2,7 @@
 #include "EZRadiusClientIdentify.h"
 #include "clsEpollReactor.h"
 #include "clsLog.h"
+#include "EZAddr.h"
 #include <arpa/inet.h>
 
 EZCoA::EZCoA(netrector::EpollReactor *reactor, const EZClientSettings &Settings)
@@ -22,9 +23,16 @@ void EZCoA::SetGetRequests(const CoACallback &callback, void *p)
     m_callback = callback;
 }
 
-void EZCoA::onResolved(const char *hostname, char **ips, size_t count, int, void *user_data)
+void EZCoA::onResolved(const char *hostname, char **ips, size_t count, int qtype, void *user_data)
 {
     EZCoA *pThis = static_cast<EZCoA*>(user_data);
+    if(count == 0 && qtype == netrector::DNSLookup::A && hostname){
+        // no IPv4 address: try IPv6
+        pThis->m_pServer->reactor()->getIPbyName(hostname,
+            (netrector::DNSLookup::callback_t)[](const char *h, char **i, size_t n, netrector::DNSLookup::QUERY_TYPE q, void *u){ onResolved(h, i, n, (int)q, u); },
+            pThis, netrector::DNSLookup::AAAA);
+        return;
+    }
     if(count == 0 || !ips || !ips[0]){
         NR_LOG(netrector::LOG_WARN, "EZCoA: can not resolve %s", hostname ? hostname : "?");
         return;
@@ -42,8 +50,9 @@ void EZCoA::addAllowed(const std::string &hostOrIp)
     if(m_pServer->RASList()->SetRAS(m_settings.Secret.c_str(), hostOrIp.c_str()))
         return;
 
-    struct in_addr tmp;
-    if(inet_pton(AF_INET, hostOrIp.c_str(), &tmp) == 1)
+    struct sockaddr_storage tmp;
+    socklen_t tmpLen;
+    if(ezaddr::parse(hostOrIp.c_str(), 0, tmp, tmpLen))
         return;     // valid IP but the secret was rejected (empty / too long)
 
     m_pServer->reactor()->getIPbyName(hostOrIp.c_str(),
