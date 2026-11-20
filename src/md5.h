@@ -37,11 +37,21 @@ typedef struct MD5Context
 } MD5_CTX;
 
 extern void MD5Init(struct MD5Context * ctx);
-extern void MD5Update(struct MD5Context *ctx, unsigned char *buf, uint32_t len);
+extern void MD5Update(struct MD5Context *ctx, const unsigned char *buf, uint32_t len);
 extern void MD5Final(unsigned char digest[16], struct MD5Context *ctx);
 extern void MD5Transform(uint32_t buf[4], uint32_t in[16]);
 
-extern void MD5Calc(unsigned char *output,unsigned char *input, uint32_t len);
+extern void MD5Calc(unsigned char *output, const unsigned char *input, uint32_t len);
+
+/// HMAC-MD5 (RFC 2104). Used for the Message-Authenticator attribute (RFC 3579).
+extern void HMAC_MD5(unsigned char output[16], const unsigned char *key, uint32_t keyLen,
+                     const unsigned char *data, uint32_t dataLen);
+
+/// Constant time memory comparison. Returns 1 when equal.
+extern int ConstTimeEqual(const unsigned char *a, const unsigned char *b, uint32_t len);
+
+/// Fill buffer with cryptographically secure random bytes. Returns 1 on success.
+extern int SecureRandom(unsigned char *buf, uint32_t len);
 
 #endif /* __MD5_H_ */
 

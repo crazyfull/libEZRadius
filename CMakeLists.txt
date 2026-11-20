@@ -1,99 +1,63 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.14)
 
 project(libEZRadius
-    VERSION 1.4.6
-    DESCRIPTION "radius Library"
+    VERSION 2.0.0
+    DESCRIPTION "Asynchronous RADIUS client / server / CoA library on netRector"
     LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_INCLUDE_CURRENT_DIR ON)
-set(CMAKE_CXX_FLAGS_RELEASE_INIT "-Wall -O2")
 
-option(BUILD_SHARED_LIBS "Build shared librarie" ON)
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif()
 
-## #### #### ##add_definitions(-D USE_FOR_TEST=1)
+option(BUILD_SHARED_LIBS "Build shared library" OFF)
+option(EZRADIUS_BUILD_EXAMPLES "Build the example programs" ON)
+option(EZRADIUS_BUILD_TESTS "Build the tests" ON)
+option(EZRADIUS_SANITIZE "Build with AddressSanitizer + UndefinedBehaviorSanitizer" OFF)
 
-#test project or library compile
-set(USE_FOR_TEST ON)
-option(USE_FOR_TEST "Build test project" ON)
-
-# Dependent Libraries
-file(GLOB SOURCES "./src/*.cpp")
-file(GLOB HEADERS "./src/*.h")
-
-# Set include directories for the library, baraye include header haye ye library
-#target_include_directories(libEZRadius PUBLIC "./src")
-
-
-set(HEADERS ${HEADERS}
-    #WebSocketClient.h
-)
-
-if (USE_FOR_TEST)
-    message(STATUS "Using execute: YES")
-
-    #add main file
-    set(SOURCES ${SOURCES}
-        main.cpp
-    )
-
-    #
-    add_executable(libEZRadius ${SOURCES} ${HEADERS})
-
-    #link Dependent Libraries
-    target_link_libraries(libEZRadius
-        -llibWrench
-        -lpthread -lssl -lcrypto
-    )
-
-    if (${CMAKE_BUILD_TYPE} STREQUAL "Release")
-        message(STATUS "Full static compile: YES")
-        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libgcc -static-libstdc++")
-    endif()
-
-else()
-    message(STATUS "Using library project: YES")
-
-    #for library project
-    if(BUILD_SHARED_LIBS)
-        add_library(libEZRadius SHARED ${SOURCES} ${HEADERS})
+# netRector (https://github.com/crazyfull/netRector):
+#   -DEZRADIUS_NETRECTOR_DIR=/path/to/netRector   (source tree, built together)
+# or a netRector target / package that already exists in the parent project.
+set(EZRADIUS_NETRECTOR_DIR "" CACHE PATH "netRector source directory")
+if(NOT TARGET netRector)
+    if(EZRADIUS_NETRECTOR_DIR)
+        set(NETRECTOR_BUILD_EXAMPLE OFF CACHE BOOL "" FORCE)
+        add_subdirectory(${EZRADIUS_NETRECTOR_DIR} netRector EXCLUDE_FROM_ALL)
+    elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/netRector/CMakeLists.txt")
+        set(NETRECTOR_BUILD_EXAMPLE OFF CACHE BOOL "" FORCE)
+        add_subdirectory(third_party/netRector netRector EXCLUDE_FROM_ALL)
     else()
-        add_library(libEZRadius STATIC ${SOURCES} ${HEADERS})
-        message(STATUS "Using library static: YES")
+        message(FATAL_ERROR "netRector not found: set -DEZRADIUS_NETRECTOR_DIR=<path> or put it in third_party/netRector")
     endif()
 endif()
 
-## Set include directories for the library, [baraye include header haye ye library]
-include_directories(${CMAKE_SOURCE_DIR}/src)
-target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_SOURCE_DIR}/src)
+file(GLOB EZRADIUS_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
+file(GLOB EZRADIUS_HEADERS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h")
 
+add_library(EZRadius ${EZRADIUS_SOURCES})
+add_library(EZRadius::EZRadius ALIAS EZRadius)
+target_include_directories(EZRadius PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/EZRadius>)
+target_link_libraries(EZRadius PUBLIC netRector)
+target_compile_options(EZRadius PRIVATE -Wall)
 
-set_target_properties(libEZRadius PROPERTIES OUTPUT_NAME libEZRadius)
+if(EZRADIUS_SANITIZE)
+    target_compile_options(EZRadius PUBLIC -fsanitize=address,undefined -fno-omit-frame-pointer -g)
+    target_link_options(EZRadius PUBLIC -fsanitize=address,undefined)
+endif()
+
+if(EZRADIUS_BUILD_EXAMPLES)
+    add_subdirectory(example)
+endif()
+
+if(EZRADIUS_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
 
 include(GNUInstallDirs)
-#install(TARGETS libEZRadius  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-
-if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
-    set(CMAKE_INSTALL_PREFIX "/usr")
-endif()
-
-#دستور سفارشی را برای پاک کردن فایل های قدیمی اضافه کنید.
-#add_custom_command(TARGET libEZRadius PRE_BUILD COMMAND rm -f ${CMAKE_SOURCE_DIR}/build)
-
-# هدف my_target را در دایرکتوری /usr/bin نصب کنید.
-#install(TARGETS libEZRadius DESTINATION ${CMAKE_INSTALL_BINDIR})
-
-# کتابخانه my_library را در دایرکتوری /usr/lib نصب کنید.
-install(TARGETS libEZRadius DESTINATION ${CMAKE_INSTALL_LIBDIR})
-
-# فایل هدر my_header.h را در دایرکتوری /usr/include نصب کنید.
-install(FILES ${HEADERS} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/EZRadius)
-
-message(STATUS "build options:
-    Install prefix:  ${CMAKE_INSTALL_PREFIX}
-    Target system:   ${CMAKE_SYSTEM_NAME}
-    C compiler:    ${CMAKE_C_COMPILER}
-    Install library path:   ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}
-    Install library include path:    ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_INCLUDEDIR}
-    ")
+install(TARGETS EZRadius ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
+install(FILES ${EZRADIUS_HEADERS} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/EZRadius)
