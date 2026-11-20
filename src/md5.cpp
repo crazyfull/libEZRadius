@@ -71,7 +71,7 @@ void MD5Init(struct MD5Context * ctx)
  * Update context to reflect the concatenation of another buffer full
  * of bytes.
  */
-void MD5Update(struct MD5Context *ctx, unsigned char *buf, uint32_t len)
+void MD5Update(struct MD5Context *ctx, const unsigned char *buf, uint32_t len)
 {
     uint32_t t;
 
@@ -157,7 +157,7 @@ void MD5Final(unsigned char digest[16], struct MD5Context *ctx)
     MD5Transform(ctx->buf, (uint32_t *) ctx->in);
     byteReverse((unsigned char *) ctx->buf, 4);
     memcpy(digest, ctx->buf, 16);
-    memset(ctx, 0, sizeof(ctx));        /* In case it's sensitive */
+    memset(ctx, 0, sizeof(*ctx));        /* In case it's sensitive */
 }
 
 
@@ -180,7 +180,7 @@ void MD5Final(unsigned char digest[16], struct MD5Context *ctx)
  */
 void MD5Transform(uint32_t buf[4], uint32_t in[16])
 {
-    register uint32_t a, b, c, d;
+    uint32_t a, b, c, d;
 
     a = buf[0];
     b = buf[1];
@@ -265,10 +265,90 @@ void MD5Transform(uint32_t buf[4], uint32_t in[16])
 /*
  * Complete MD5 algorithm in a single function
  */
-void MD5Calc(unsigned char *output,unsigned char *input, uint32_t len)
+void MD5Calc(unsigned char *output, const unsigned char *input, uint32_t len)
 {
     MD5Context context;
     MD5Init(&context);
     MD5Update(&context, input, len);
     MD5Final(output, &context);
+}
+
+
+/*
+ * HMAC-MD5 (RFC 2104)
+ */
+void HMAC_MD5(unsigned char output[16], const unsigned char *key, uint32_t keyLen,
+              const unsigned char *data, uint32_t dataLen)
+{
+    unsigned char k[64];
+    unsigned char ipad[64], opad[64];
+    unsigned char inner[16];
+    MD5Context ctx;
+
+    memset(k, 0, sizeof(k));
+    if (keyLen > 64)
+        MD5Calc(k, key, keyLen);          // key longer than block size: hash it first
+    else if (keyLen > 0)
+        memcpy(k, key, keyLen);
+
+    for (int i = 0; i < 64; i++)
+    {
+        ipad[i] = k[i] ^ 0x36;
+        opad[i] = k[i] ^ 0x5c;
+    }
+
+    MD5Init(&ctx);
+    MD5Update(&ctx, ipad, 64);
+    MD5Update(&ctx, data, dataLen);
+    MD5Final(inner, &ctx);
+
+    MD5Init(&ctx);
+    MD5Update(&ctx, opad, 64);
+    MD5Update(&ctx, inner, 16);
+    MD5Final(output, &ctx);
+}
+
+
+int ConstTimeEqual(const unsigned char *a, const unsigned char *b, uint32_t len)
+{
+    unsigned char diff = 0;
+    for (uint32_t i = 0; i < len; i++)
+        diff |= (unsigned char)(a[i] ^ b[i]);
+    return diff == 0;
+}
+
+
+#include <sys/types.h>
+#include <fcntl.h>
+#include <unistd.h>
+#if defined(__linux__)
+#include <sys/random.h>
+#endif
+
+int SecureRandom(unsigned char *buf, uint32_t len)
+{
+    uint32_t got = 0;
+#if defined(__linux__)
+    while (got < len)
+    {
+        ssize_t r = getrandom(buf + got, len - got, 0);
+        if (r < 0)
+            break;                         // fall back to /dev/urandom
+        got += (uint32_t)r;
+    }
+    if (got == len)
+        return 1;
+#endif
+    int fd = open("/dev/urandom", O_RDONLY | O_CLOEXEC);
+    if (fd < 0)
+        return 0;
+    while (got < len)
+    {
+        ssize_t r = read(fd, buf + got, len - got);
+        if (r <= 0)
+            break;
+        got += (uint32_t)r;
+    }
+    close(fd);
+    return got == len;
 }

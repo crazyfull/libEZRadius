@@ -1,102 +1,59 @@
 #include "EZResponse.h"
-#include "EZRadiusServer.h"
 #include "EZRadiusClientIdentify.h"
+#include "EZAttrUtil.h"
+#include "clsUDPSocket.h"
 
-EZResponse::EZResponse(EZRadiusServer *pRadiusServer)
+bool EZResponse::AddAttribute(RADIUSAttribute AttType, const char *value)
 {
-    m_pRadiusServer = pRadiusServer;
+    if(AttType == D_ATTR_USER_PASSWORD || AttType == D_ATTR_CHAP_PASSWORD || AttType == D_ATTR_MESSAGE_AUTHENTICATOR)
+        return false;
+    return ezutil::addString(m_Pck, AttType, value);
 }
 
-void EZResponse::AddAttribute(RADIUSAttribute AttType, const char *value)
+bool EZResponse::AddAttribute(RADIUSAttribute AttType, uint32_t value)
 {
-    if(!value)
-        return;
-
-    //attributes
-    RadiusAttribute MyAttr;
-
-    //add string attribute
-    m_Pck.addAttribute(AttType, MyAttr);
-
-
-    switch (AttType) {
-    case D_ATTR_USER_PASSWORD:
-        //PAP password
-        MyAttr.setUserPassword(value);
-        break;
-    case D_ATTR_CHAP_PASSWORD:
-        //CHAP password
-        //MyAttr.setUserPassword(value);
-        break;
-    case D_ATTR_NAS_IP_ADDRESS:
-    case D_ATTR_FRAMED_IP_ADDRESS:
-    case D_ATTR_FRAMED_IP_NETMASK:
-    case D_ATTR_LOGIN_IP_HOST:
-    case D_ATTR_FRAMED_IPX_NETWORK:
-        //set IP Addresses
-        struct in_addr IPaddr;
-        IPaddr.s_addr = inet_addr(value);
-        MyAttr.setIPAddress(IPaddr);
-        break;
-    default:
-        //plain text
-        MyAttr.setString(value);
-        break;
-    }
-
-    /*
-    if(AttType == D_ATTR_USER_PASSWORD){
-        //PAP password
-        MyAttr.setUserPassword(value);
-    }else if(AttType == D_ATTR_NAS_IP_ADDRESS || AttType == D_ATTR_FRAMED_IP_ADDRESS || AttType == D_ATTR_FRAMED_IP_NETMASK || AttType == D_ATTR_LOGIN_IP_HOST || AttType == D_ATTR_FRAMED_IPX_NETWORK){
-        //set IP Addresses
-        struct in_addr IPaddr;
-        IPaddr.s_addr = inet_addr(value);
-        MyAttr.setIPAddress(IPaddr);
-    }else{
-        //plain text
-        MyAttr.setString(value);
-    }
-*/
+    if(AttType == D_ATTR_USER_PASSWORD || AttType == D_ATTR_CHAP_PASSWORD || AttType == D_ATTR_MESSAGE_AUTHENTICATOR)
+        return false;
+    return ezutil::addNumber(m_Pck, AttType, value);
 }
 
-void EZResponse::AddAttribute(RADIUSAttribute AttType, uint32_t value)
+bool EZResponse::AddVendorAttribute(uint32_t vendorId, unsigned char vendorType, const void *data, uint16_t length)
 {
-    //https://g.co/bard/share/dc01ca6ca8d4
-    //attributes
-    RadiusAttribute MyAttr;
-
-    //add string attribute
-    m_Pck.addAttribute(AttType, MyAttr);
-    MyAttr.setNumber(value);
+    return ezutil::addVendor(m_Pck, vendorId, vendorType, data, length);
 }
 
-void EZResponse::Send(RADIUSPacketTypeCodes code, EZRadiusClientIdentify *ClientIdentify)
+bool EZResponse::AddVendorAttribute(uint32_t vendorId, unsigned char vendorType, const char *text)
 {
-    if(!ClientIdentify)
-        return;
+    if(!text)
+        return false;
+    size_t len = strnlen(text, 256);
+    if(len > 255)
+        return false;
+    return ezutil::addVendor(m_Pck, vendorId, vendorType, text, (uint16_t)len);
+}
 
-    RASItem *pRAS = m_pRadiusServer->RASList()->GetRASByIP(ClientIdentify->UDPClient().getIPAddress());
-    //if secret not found
-    if(!pRAS){
-        return;
-    }
+bool EZResponse::Send(RADIUSPacketTypeCodes code, EZRadiusClientIdentify *ClientIdentify)
+{
+    if(!ClientIdentify || !ClientIdentify->Socket() || !ClientIdentify->RAS())
+        return false;
 
-    m_Pck.setCode(code);
+    // keeps the RAS (and its secret) alive even if it is removed from the list meanwhile
+    std::shared_ptr<RASItem> ras = ClientIdentify->RAS();
+
+    m_Pck.setCode((unsigned char)code);
     m_Pck.setID(ClientIdentify->ID());
+    m_Pck.setSecret(&ras->Secret);
+    // the authenticator field holds the Request Authenticator until the response authenticator is calculated
+    m_Pck.setAuthenticator(ClientIdentify->Authenticator());
 
-    if (code == ACCESS_REQUEST || code == ACCOUNTING_REQUEST  ){    //|| code == DISCONNECT_ACK || code == DISCONNECT_NAK
-        //zamani ke ghasde accounting ya acess dashtim bayad setesh konim
-        //m_Pck.setSecret(&pRAS->Secret); //???
+    const bool accessResponse = (code == ACCESS_ACCEPT || code == ACCESS_REJECT || code == ACCESS_CHALLENGE);
+    if(accessResponse && ClientIdentify->RequestHadMessageAuthenticator()){
+        if(!m_Pck.addMessageAuthenticator() || !m_Pck.signMessageAuthenticator())
+            return false;
     }
 
-    m_Pck.setSecret(&pRAS->Secret); //???
-    m_Pck.setAuthenticator(ClientIdentify->Authenticator());
-    m_Pck.responseAuthenticator();
+    if(!m_Pck.responseAuthenticator())
+        return false;
 
-    //m_Pck.dump();
-
-    //send
-    ClientIdentify->UDPClient().Send((const char*)m_Pck.getRawData(), m_Pck.getLength());
-
+    return ClientIdentify->Socket()->sendTo(m_Pck.getRawData(), m_Pck.getLength(), ClientIdentify->Peer(), ClientIdentify->PeerLen());
 }

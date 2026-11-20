@@ -3,43 +3,66 @@
 #include "RadiusPacket.h"
 #include "EZRASList.h"
 #include <functional>
+#include <string>
+#include <vector>
 
-class clsUDPServer;
-class clsUDPSocket;
-class clsUDPListener;
+namespace netrector { class EpollReactor; class UDPSocket; }
+
 class EZRadiusServer;
 class EZRadiusClientIdentify;
 typedef std::function<void(RADIUSPacketTypeCodes, RadiusPacket &, EZRadiusClientIdentify &ClientIdentify, EZRadiusServer *pRadiusServer, void *p)> RADIUSCallback;
+
+// Asynchronous RADIUS server on a netRector reactor (no threads, no blocking calls).
+//
+// All methods must be called from the reactor thread (use reactor->post() from other threads).
+// Every received packet is checked before the callback runs:
+//   - the sender must be in RASList() (otherwise it is dropped silently)
+//   - the packet must be a well formed RADIUS packet
+//   - Accounting / Disconnect / CoA requests: Request Authenticator verified
+//   - Message-Authenticator verified when present (required for Access-Request if
+//     setRequireMessageAuthenticator(true))
 class EZRadiusServer
 {
-    //RAS list
+    netrector::EpollReactor *m_pReactor;
     EZRASList m_RASList;
+    std::vector<netrector::UDPSocket*> m_sockets;
 
-    //udp server
-    clsUDPServer *m_pUDPServer;
-
-    // uin
     uint16_t m_AuthPort;
     uint16_t m_AccPort;
+    std::string m_BindAddress;
+    bool m_RequireMA = false;
 
-    //callbacl
-    RADIUSCallback _radiusallback;
-    void *m_pPointerCallback;
+    RADIUSCallback m_callback;
+    void *m_pPointerCallback = nullptr;
 
-    static void onReceiveUDPData(clsUDPListener* pListener, void*p, clsUDPSocket& UDPClient, const char*Data, int DataLength);
+    netrector::UDPSocket *openSocket(uint16_t port);
+    friend class EZServerSocket;
+    void socketClosed(netrector::UDPSocket *s);
+    void handleDatagram(netrector::UDPSocket *socket, const uint8_t *data, size_t len, const struct sockaddr *from, socklen_t fromLen);
 
 public:
-    EZRadiusServer();
-    ~EZRadiusServer();
+    explicit EZRadiusServer(netrector::EpollReactor *reactor);
+    virtual ~EZRadiusServer();
+    EZRadiusServer(const EZRadiusServer&) = delete;
+    EZRadiusServer &operator=(const EZRadiusServer&) = delete;
+
     void setAuthenticationPort(uint16_t newAuthenticationPort);
     void setAccountingPort(uint16_t newAccountingPort);
+    // local address to bind to (default "0.0.0.0")
+    void setBindAddress(const char *ip);
+    void setRequireMessageAuthenticator(bool required) { m_RequireMA = required; }
 
-    //void on
-    void Start();
+    // bind the sockets. false: already started or bind failed (nothing stays open on failure)
+    bool Start();
+    void Stop();
+    bool isStarted() const { return !m_sockets.empty(); }
+
     uint16_t AuthenticatorPort() const;
     uint16_t AccountingPort() const;
     EZRASList *RASList();
+    netrector::EpollReactor *reactor() const { return m_pReactor; }
 
+    // default handler (used when no callback is set): does nothing
     virtual void onReceiveRequest(RADIUSPacketTypeCodes PacketType, RadiusPacket &pRequest, EZRadiusClientIdentify &ClientIdentify, EZRadiusServer *pRadiusServer);
     void SeRequestCallback(const RADIUSCallback &callback, void *p = nullptr);
 };
