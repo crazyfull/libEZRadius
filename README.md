@@ -68,6 +68,29 @@ coa.Start();
 
 `Host` و `RAS_IP` در تنظیمات، آدرس‌های مجاز برای ارسال درخواست هستند.
 
+## ارسال Disconnect و CoA به NAS
+
+کلاس `EZRadiusClient` علاوه بر Access و Accounting، درخواست‌های `C_DISCONNECT_REQUEST` و `C_COA_REQUEST` (RFC 5176) را هم می‌فرستد. `Host` آدرس NAS است و درخواست به `CoAPort` می‌رود:
+
+```cpp
+EZClientSettings s; s.Host = "10.0.0.1"; s.Secret = "..."; s.CoAPort = 3799;
+EZRadiusClient c(&reactor, s);
+c.AddAttribute(ACCT_SESSION_ID, "session-1");
+c.Send(C_DISCONNECT_REQUEST, [](EZRadiusClient &c, EZResult r){
+    // c.GetResponseType() == DISCONNECT_ACK یا DISCONNECT_NAK
+});
+```
+
+## Status-Server
+
+سرور درخواست Status-Server (RFC 5997) را خودکار جواب می‌دهد (`setAutoStatusServer`). کلاینت با `C_STATUS_SERVER` سلامت یک سرور را بررسی می‌کند.
+
+## قابلیت‌های سرور
+
+- تشخیص درخواست تکراری (retransmission): درخواست تکراری دوباره به callback داده نمی‌شود و همان پاسخ قبلی دوباره ارسال می‌شود (`setDuplicateWindow`، پیش‌فرض ۳۰ ثانیه).
+- `Proxy-State` درخواست بدون تغییر در پاسخ کپی می‌شود.
+- IPv6: برای dual-stack از `setBindAddress("::")` استفاده کنید. آدرس RAS و `Host` کلاینت می‌تواند IPv6 باشد و نام میزبان با A و بعد AAAA resolve می‌شود. (تست IPv6 به loopback دارای IPv6 نیاز دارد و در محیطی که IPv6 ندارد رد می‌شود.)
+
 ## قواعد استفاده
 
 - همه‌چیز فقط از thread مربوط به reactor استفاده شود؛ از threadهای دیگر با `reactor.post()`.
@@ -79,3 +102,4 @@ coa.Start();
 - `test_packet`: تست واحد (شامل بردارهای RFC 2202 و RFC 2865 بخش 7.1)
 - `test_loopback`: سرور، کلاینت و CoA روی یک reactor
 - `fuzz_packet`: fuzz ساده‌ی parser پکت
+- `fuzz/fuzz_libfuzzer.cpp`: هدف libFuzzer (با clang و `-DEZRADIUS_BUILD_FUZZER=ON`)

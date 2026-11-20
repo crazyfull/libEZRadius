@@ -100,6 +100,14 @@ int main()
     CHECK(server.RASList()->AddRAS(SECRET, "127.0.0.1"));
     CHECK(server.Start());
 
+    EZRadiusServer server6(&reactor);
+    server6.setBindAddress("::1");
+    server6.setAuthenticationPort(AUTH_PORT + 1);
+    server6.setAccountingPort(ACCT_PORT + 1);
+    server6.SeRequestCallback(onRequest, nullptr);
+    server6.RASList()->AddRAS(SECRET, "::1");
+    server6.Start();
+
     EZCoA coa(&reactor, [] { EZClientSettings s; s.Host = "127.0.0.1"; s.Secret = SECRET; s.CoAPort = COA_PORT; return s; }());
     int coaSeen = 0;
     coa.SetGetRequests([&](RADIUSPacketTypeCodes t, RadiusPacket &r, EZResponse &resp, void *) {
@@ -242,6 +250,74 @@ int main()
         (void)coaSeen;
     });
 
+    // 12. Status-Server (RFC 5997): answered by the library
+    g_steps.push_back([](std::function<void()> next){
+        EZRadiusClient *c = newClient(baseSettings());
+        c->Send(C_STATUS_SERVER, [next](EZRadiusClient &c, EZResult r){
+            CHECK(r == EZResult::OK); CHECK(c.GetResponseType() == ACCESS_ACCEPT); next(); });
+    });
+    // 13. Proxy-State is echoed
+    g_steps.push_back([](std::function<void()> next){
+        EZRadiusClient *c = newClient(baseSettings());
+        c->AddAttribute(USER_NAME, "alice"); c->AddAttribute(USER_PASSWORD, "wonderland");
+        CHECK(c->AddAttribute(PROXY_STATE, "proxy-1"));
+        c->Send(C_ACCESS_REQUEST, [next](EZRadiusClient &c, EZResult r){
+            CHECK(r == EZResult::OK);
+            CHECK(c.GetAttribute(PROXY_STATE).strValue == "proxy-1");
+            next(); });
+    });
+    // 14. Disconnect / CoA requests sent by the client class to the CoA listener
+    g_steps.push_back([](std::function<void()> next){
+        EZClientSettings s = baseSettings(); s.CoAPort = COA_PORT;
+        EZRadiusClient *c = newClient(s);
+        c->AddAttribute(USER_NAME, "alice"); c->AddAttribute(ACCT_SESSION_ID, "s1");
+        c->Send(C_DISCONNECT_REQUEST, [next, s](EZRadiusClient &c, EZResult r){
+            CHECK(r == EZResult::OK); CHECK(c.GetResponseType() == DISCONNECT_ACK);
+            EZRadiusClient *c2 = newClient(s);
+            c2->AddAttribute(USER_NAME, "alice");
+            c2->Send(C_COA_REQUEST, [next](EZRadiusClient &c, EZResult r){
+                CHECK(r == EZResult::OK); CHECK(c.GetResponseType() == COA_NAK); next(); });
+        });
+    });
+    // 15. retransmission: the same request twice is processed once, answered twice
+    g_steps.push_back([](std::function<void()> next){
+        auto *peer = new CoAPeer;
+        peer->setReactor(g_reactor);
+        peer->open(AF_INET);
+        peer->connect("127.0.0.1", AUTH_PORT);
+        auto replies = std::make_shared<int>(0);
+        auto seenBefore = std::make_shared<int>(g_accessSeen);
+        peer->handler = [peer, replies, seenBefore, next](const uint8_t *, size_t){
+            if(++*replies == 2){
+                CHECK(g_accessSeen == *seenBefore + 1);
+                peer->close();
+                next();
+            }
+        };
+        RadiusSecret sec(SECRET);
+        RadiusPacket p(1); p.setSecret(&sec);
+        RadiusAttribute a;
+        p.addAttribute(D_ATTR_USER_NAME, a); a.setString("alice");
+        p.addAttribute(D_ATTR_USER_PASSWORD, a); a.setUserPassword("wonderland");
+        p.addMessageAuthenticator(); p.signMessageAuthenticator();
+        peer->send(p.getRawData(), p.getLength());
+        peer->send(p.getRawData(), p.getLength());
+    });
+    // 16. IPv6 server and client (skipped when the host has no IPv6 loopback)
+    g_steps.push_back([&server6](std::function<void()> next){
+        if(!server6.isStarted()){
+            printf("note: IPv6 loopback not available, IPv6 step skipped\n");
+            next();
+            return;
+        }
+        EZClientSettings s = baseSettings(); s.Host = "::1"; s.AuthenticationPort = AUTH_PORT + 1;
+        EZRadiusClient *c = newClient(s);
+        c->AddAttribute(USER_NAME, "alice"); c->AddAttribute(USER_PASSWORD, "wonderland");
+        CHECK(c->AddAttribute(NAS_IP_ADDRESS, "10.0.0.1"));
+        c->Send(C_ACCESS_REQUEST, [next](EZRadiusClient &c, EZResult r){
+            CHECK(r == EZResult::OK); CHECK(c.GetResponseType() == ACCESS_ACCEPT); next(); });
+    });
+
     // run: first remove nothing; step 10 needs the RAS removed first
     g_steps.insert(g_steps.begin() + 9, [&server](std::function<void()> next){ server.RASList()->removeRASByIP("127.0.0.1"); next(); });
     g_steps.insert(g_steps.begin() + 11, [&server](std::function<void()> next){ server.RASList()->AddRAS(SECRET, "127.0.0.1"); next(); });
@@ -251,7 +327,7 @@ int main()
     reactor.post([]{ runNext(); });
     reactor.run(g_stop);
 
-    CHECK(coaSeen == 2);
+    CHECK(coaSeen == 4);
     CHECK(g_acctSeen == 1);
     g_clients.clear();
     printf(g_fail ? "FAILED (%d)\n" : "all loopback tests passed\n", g_fail);

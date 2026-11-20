@@ -1,6 +1,7 @@
 #include "EZResponse.h"
 #include "EZRadiusClientIdentify.h"
 #include "EZAttrUtil.h"
+#include "EZDedup.h"
 #include "clsUDPSocket.h"
 
 bool EZResponse::AddAttribute(RADIUSAttribute AttType, const char *value)
@@ -46,6 +47,14 @@ bool EZResponse::Send(RADIUSPacketTypeCodes code, EZRadiusClientIdentify *Client
     // the authenticator field holds the Request Authenticator until the response authenticator is calculated
     m_Pck.setAuthenticator(ClientIdentify->Authenticator());
 
+    // Proxy-State attributes of the request must be copied unmodified and in order (RFC 2865 section 5.33)
+    for(const std::string &ps : ClientIdentify->ProxyStates()){
+        RadiusAttribute attr;
+        if(ps.size() > D_ATTR_MAX_VALUE_LENGTH || m_Pck.addAttribute(D_ATTR_PROXY_STATE, attr) != RC_SUCCESS
+           || attr.setString(ps.data(), (uint16_t)ps.size()) != RC_SUCCESS)
+            return false;
+    }
+
     const bool accessResponse = (code == ACCESS_ACCEPT || code == ACCESS_REJECT || code == ACCESS_CHALLENGE);
     if(accessResponse && ClientIdentify->RequestHadMessageAuthenticator()){
         if(!m_Pck.addMessageAuthenticator() || !m_Pck.signMessageAuthenticator())
@@ -55,5 +64,11 @@ bool EZResponse::Send(RADIUSPacketTypeCodes code, EZRadiusClientIdentify *Client
     if(!m_Pck.responseAuthenticator())
         return false;
 
-    return ClientIdentify->Socket()->sendTo(m_Pck.getRawData(), m_Pck.getLength(), ClientIdentify->Peer(), ClientIdentify->PeerLen());
+    if(!ClientIdentify->Socket()->sendTo(m_Pck.getRawData(), m_Pck.getLength(), ClientIdentify->Peer(), ClientIdentify->PeerLen()))
+        return false;
+
+    // remember the answer: a retransmitted request gets the same answer without being processed again
+    if(ClientIdentify->dedup())
+        ClientIdentify->dedup()->storeResponse(ClientIdentify->dedupKey(), m_Pck.getRawData(), m_Pck.getLength());
+    return true;
 }

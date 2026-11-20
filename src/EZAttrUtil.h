@@ -24,6 +24,17 @@ inline bool addString(RadiusPacket &pck, RADIUSAttribute type, const char *value
         return attr.setIPAddress(ip) == RC_SUCCESS;
     }
 
+    // NAS-IPv6-Address (95): 16 byte address
+    if(type == 95){
+        struct in6_addr ip6;
+        if(inet_pton(AF_INET6, value, &ip6) != 1)
+            return false;
+        RadiusAttribute attr;
+        if(pck.addAttribute((unsigned char)type, attr) != RC_SUCCESS)
+            return false;
+        return attr.setString((const char*)&ip6, 16) == RC_SUCCESS;
+    }
+
     size_t len = strnlen(value, D_ATTR_MAX_VALUE_LENGTH + 1);
     if(len > D_ATTR_MAX_VALUE_LENGTH)
         return false;
