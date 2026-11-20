@@ -2,6 +2,8 @@
 #include "EZAttrUtil.h"
 #include "EZAddr.h"
 #include "md5.h"
+#include "EZCrypto.h"
+#include "EZVendor.h"
 #include "clsUDPSocket.h"
 #include "clsEpollReactor.h"
 #include "clsLog.h"
@@ -72,6 +74,11 @@ void EZRadiusClient::Reset()
     m_RequestPck.setSecret(&m_Secret);
     m_RequestPck.randomID();
     m_Response = RadiusPacket();
+#ifdef EZRADIUS_HAS_CRYPTO
+    EZCrypto::Wipe(m_msNtHash, sizeof(m_msNtHash));
+    m_msKind = 0;
+    m_msUser.clear();
+#endif
     m_state = State::Idle;
     m_result = EZResult::NONE;
 }
@@ -157,6 +164,94 @@ bool EZRadiusClient::resolve(int qtype)
         m_dnsPending = false;
     return ok;
 }
+
+#ifdef EZRADIUS_HAS_CRYPTO
+bool EZRadiusClient::AddMSCHAPv2(const char *userName, const char *password)
+{
+    if(m_state != State::Idle || !userName || !password || m_msKind != 0)
+        return false;
+    if(strnlen(userName, 254) > 253 || strnlen(password, 1025) > 1024)
+        return false;
+
+    m_msUser = userName;
+    EZCrypto::Random(m_msAuthChallenge, 16);
+    EZCrypto::Random(m_msPeerChallenge, 16);
+    EZCrypto::Random(&m_msIdent, 1);
+    EZMSCHAP::NtPasswordHash(password, m_msNtHash);
+    EZMSCHAP::GenerateNTResponseV2(m_msAuthChallenge, m_msPeerChallenge, m_msUser, m_msNtHash, m_msNtResponse);
+
+    // MS-CHAP2-Response: ident, flags, peer challenge(16), reserved(8), NT response(24)
+    unsigned char resp[50];
+    memset(resp, 0, sizeof(resp));
+    resp[0] = m_msIdent;
+    memcpy(resp + 2, m_msPeerChallenge, 16);
+    memcpy(resp + 26, m_msNtResponse, 24);
+
+    if(!ezutil::addString(m_RequestPck, USER_NAME, userName)
+       || !ezutil::addVendor(m_RequestPck, D_VENDOR_MICROSOFT, MS_CHAP_CHALLENGE, m_msAuthChallenge, 16)
+       || !ezutil::addVendor(m_RequestPck, D_VENDOR_MICROSOFT, MS_CHAP2_RESPONSE, resp, 50))
+        return false;
+    m_msKind = 2;
+    return true;
+}
+
+bool EZRadiusClient::AddMSCHAPv1(const char *userName, const char *password)
+{
+    if(m_state != State::Idle || !userName || !password || m_msKind != 0)
+        return false;
+    if(strnlen(userName, 254) > 253 || strnlen(password, 1025) > 1024)
+        return false;
+
+    m_msUser = userName;
+    uint8_t challenge[8];
+    EZCrypto::Random(challenge, 8);
+    EZCrypto::Random(&m_msIdent, 1);
+    EZMSCHAP::NtPasswordHash(password, m_msNtHash);
+
+    // MS-CHAP-Response: ident, flags (1 = NT response), LM response(24, unused), NT response(24)
+    unsigned char resp[50];
+    memset(resp, 0, sizeof(resp));
+    resp[0] = m_msIdent;
+    resp[1] = 1;
+    EZMSCHAP::ChallengeResponse(challenge, m_msNtHash, resp + 26);
+
+    if(!ezutil::addString(m_RequestPck, USER_NAME, userName)
+       || !ezutil::addVendor(m_RequestPck, D_VENDOR_MICROSOFT, MS_CHAP_CHALLENGE, challenge, 8)
+       || !ezutil::addVendor(m_RequestPck, D_VENDOR_MICROSOFT, MS_CHAP_RESPONSE, resp, 50))
+        return false;
+    m_msKind = 1;
+    return true;
+}
+
+bool EZRadiusClient::MSCHAPv2ServerVerified()
+{
+    if(m_result != EZResult::OK || m_msKind != 2 || m_Response.getCode() != ACCESS_ACCEPT)
+        return false;
+
+    std::string v;
+    if(!ezvendor::find(m_Response, D_VENDOR_MICROSOFT, MS_CHAP2_SUCCESS, v) || v.size() != 43 || (uint8_t)v[0] != m_msIdent)
+        return false;
+
+    const std::string expected = EZMSCHAP::AuthenticatorResponseV2(m_msNtHash, m_msNtResponse, m_msPeerChallenge, m_msAuthChallenge, m_msUser);
+    return expected.size() == 42 && EZCrypto::Equal(expected.data(), v.data() + 1, 42);
+}
+
+bool EZRadiusClient::GetMPPEKeys(uint8_t sendKey[16], uint8_t recvKey[16])
+{
+    if(m_result != EZResult::OK)
+        return false;
+    const unsigned char *secret = nullptr;
+    uint16_t secretLen = 0;
+    if(m_Secret.getSecret(secret, secretLen) != RC_SUCCESS)
+        return false;
+
+    std::string s, r;
+    if(!ezvendor::find(m_Response, D_VENDOR_MICROSOFT, MS_MPPE_SEND_KEY, s) || !ezvendor::find(m_Response, D_VENDOR_MICROSOFT, MS_MPPE_RECV_KEY, r))
+        return false;
+    return EZMSCHAP::DecodeMppeKey(s, secret, secretLen, m_RequestPck.getAuthenticator(), sendKey)
+        && EZMSCHAP::DecodeMppeKey(r, secret, secretLen, m_RequestPck.getAuthenticator(), recvKey);
+}
+#endif
 
 bool EZRadiusClient::Send(RADIUSClientRequestType RequestType, const Callback &callback)
 {
