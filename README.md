@@ -1,6 +1,6 @@
 # libEZRadius
 
-**An asynchronous, single-threaded RADIUS client, server and Dynamic Authorization (CoA / Disconnect) library for C++17 on Linux, built on [netRector](https://github.com/crazyfull/netRector).**
+**An asynchronous, single-threaded RADIUS client, server and Dynamic Authorization (CoA / Disconnect) library for C++ on Linux, built on [netRector](https://github.com/crazyfull/netRector).**
 
 libEZRadius provides RADIUS packet encoding and validation, client and server functionality, Authentication and Accounting, RFC 5176 Dynamic Authorization, PAP / CHAP / MS-CHAPv1 / MS-CHAPv2 helpers, and MPPE key handling. Its asynchronous API integrates with a netRector `EpollReactor`; a blocking client wrapper is also available for applications that do not use an event loop.
 
