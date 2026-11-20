@@ -1,89 +1,56 @@
-#include <unordered_set>
-#include <iostream>
-#include <typeinfo>
+// Minimal RADIUS server: answers every Access-Request with Access-Accept and every
+// Accounting-Request with Accounting-Response. Single thread, fully asynchronous.
+//   ./ezradius_server [secret] [nas-ip]
+#include <atomic>
+#include <csignal>
+#include <cstdio>
+#include "clsEpollReactor.h"
+#include "EZRadiusServer.h"
+#include "EZRadiusClientIdentify.h"
+#include "EZResponse.h"
 
-#include <Wrench/log.h>
-#include <EZRadius/EZRadiusClientIdentify.h>
-#include <EZRadius/EZRadiusServer.h>
-#include <EZRadius/EZResponse.h>
+static std::atomic<bool> g_stop{false};
 
-
-void onReceiveRequest(RADIUSPacketTypeCodes PacketType, RadiusPacket &pRequest, EZRadiusClientIdentify &ClientIdentify, EZRadiusServer *pRadiusServer, void *p)
+static void onReceiveRequest(RADIUSPacketTypeCodes type, RadiusPacket &request, EZRadiusClientIdentify &from, EZRadiusServer *, void *)
 {
-    //print request details
-    pRequest.dump();
+    // never log passwords
+    printf("%s from %s user=[%s] nas-port=%u\n", request.getCodeDescription((unsigned char)type), from.IPAddressDescription().c_str(),
+           request.getAttribute(USER_NAME).strValue.c_str(), request.getAttribute(NAS_PORT).intValue);
 
-    LOG_COLOR(Green, "onReceiveRequest "
-                     "PacketType[%s] "
-                     "NAS-IP[%s]  "
-                     "NAS-Port[%d]  "
-                     "Username[%s] "
-                     "Psassword[%s] "
-                     "NAS_IP_ADDRESS[%s]"
-                     "CALLED_STATION_ID[%s]"
-                     "ACCT_STATUS_TYPE[%u]\n",
-              pRequest.getCodeDescription(PacketType),
-              ClientIdentify.UDPClient().getIPAddressDescription(),
-              pRequest.getAttribute(NAS_PORT).intValue,
-              pRequest.getAttribute(USER_NAME).strValue.c_str(),
-              pRequest.getAttribute(USER_PASSWORD).strValue.c_str(),
-              pRequest.getAttribute(NAS_IP_ADDRESS).strValue.c_str(),
-              pRequest.getAttribute(CALLING_STATION_ID).strValue.c_str(),
-              pRequest.getAttribute(ACCT_STATUS_TYPE).intValue
-              );
-
-
-    if(PacketType == ACCOUNTING_REQUEST){
-        if((RADIUSAcctStatusType)pRequest.getAttribute(ACCT_STATUS_TYPE).intValue == RADIUSAcctStatusType::START){
-            LOG("request Accounting start");
-            return;
-        }
+    EZResponse response;
+    if(type == ACCESS_REQUEST){
+        response.AddAttribute(SERVICE_TYPE, 2);                 // Framed
+        response.AddAttribute(FRAMED_PROTOCOL, (uint32_t)1);    // PPP
+        response.AddAttribute(ACCT_INTERIM_INTERVAL, 60);
+        response.AddVendorAttribute(14988, 8, "10M/10M");        // MikroTik Rate-Limit
+        response.Send(ACCESS_ACCEPT, &from);
+    }else if(type == ACCOUNTING_REQUEST){
+        response.Send(ACCOUNTING_RESPONSE, &from);
     }
-
-
-    //example response for ACCESS_ACCEPT
-    if(PacketType == ACCESS_REQUEST){
-        EZResponse RadiusResponse(pRadiusServer);
-        RadiusResponse.AddAttribute(USER_NAME, "crazyfull");
-        RadiusResponse.AddAttribute(NAS_IP_ADDRESS, "127.0.0.1");
-        RadiusResponse.AddAttribute(ACCT_SESSION_ID, "--client-seassion---");
-
-        // add interim intravel attribute
-        RadiusResponse.AddAttribute(ACCT_INTERIM_INTRAVEL, 60);
-        RadiusResponse.AddAttribute(ACCT_AUTHENTIC, 1);         //1: RADIUS
-
-        // add Service-Type attribute
-        RadiusResponse.AddAttribute(SERVICE_TYPE, 2);            //2: Framed
-        // add Framed-protocole
-        RadiusResponse.AddAttribute(FRAMED_PROTOCOL, (int)0);    //0: PPP
-
-        //send response to client
-        RadiusResponse.Send(ACCESS_ACCEPT, &ClientIdentify);
-    }
-
 }
 
-int main3()
+int main(int argc, char **argv)
 {
-    /*
-     * https://idblender.com/tools/test-radius#85a7e4a0-6dce-4f70-a1b0-fcc8a2cdb2be
-     * radtest -t pap moji moji '2.176.229.202:1812' 0 123456
-    */
+    const char *secret = argc > 1 ? argv[1] : "change-me";
+    const char *nas = argc > 2 ? argv[2] : "127.0.0.1";
 
-    //Need a create a RAS list [IP,Secret]
+    signal(SIGINT, [](int){ g_stop = true; });
+    signal(SIGTERM, [](int){ g_stop = true; });
 
-    EZRadiusServer m_EZRadiusServer;
-    m_EZRadiusServer.setAuthenticationPort(1812);
-    m_EZRadiusServer.setAccountingPort(1813);
-    m_EZRadiusServer.SeRequestCallback(onReceiveRequest, nullptr);            //set a call back function for get all requests
-    m_EZRadiusServer.RASList()->AddRAS("123456", "127.0.0.1");      //access to NAP-IP with the secret
-    m_EZRadiusServer.RASList()->AddRAS("123456", "192.168.1.10");
-    m_EZRadiusServer.RASList()->AddRAS("123456", "198.244.189.2");
+    netrector::EpollReactor reactor(0, 1024);
 
-    m_EZRadiusServer.Start();
+    EZRadiusServer server(&reactor);
+    server.setAuthenticationPort(1812);
+    server.setAccountingPort(1813);
+    server.SeRequestCallback(onReceiveRequest, nullptr);
+    server.RASList()->AddRAS(secret, nas);     // only these addresses are served
 
-    for(;;){
-        getchar();
+    if(!server.Start()){
+        fprintf(stderr, "can not bind the RADIUS ports\n");
+        return 1;
     }
+
+    printf("RADIUS server running (auth %u, acct %u)\n", server.AuthenticatorPort(), server.AccountingPort());
+    reactor.run(g_stop);
     return 0;
 }

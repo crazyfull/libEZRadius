@@ -97,7 +97,14 @@ enum RADIUSAttribute {
     TUNNEL_ASSIGMENT_ID = 82,
     TUNNEL_PREFERENCE = 83,
     ARAP_CHALLENGE_RESPONSE = 84,
-    ACCT_INTERIM_INTRAVEL = 85
+    ACCT_INTERIM_INTRAVEL = 85,
+
+    // correctly spelled aliases (the old misspelled names are kept for compatibility)
+    ACCT_INTERIM_INTERVAL = 85,
+    LOGIN_LAT_PORT = 63,
+    CONFIGURATION_TOKEN = 78,
+    TUNNEL_PRIVATE_GROUP_ID = 81,
+    TUNNEL_ASSIGNMENT_ID = 82
 };
 
 // RADIUS Packet Type Codes
@@ -238,6 +245,7 @@ enum class RADIUSAcctStatusType {
 #define D_ATTR_TUNNEL_PREFERENCE        83
 #define D_ATTR_ARAP_CHALLENGE_RESPONSE  84
 #define D_ATTR_ACCT_INTERIM_INTRAVEL    85
+#define D_ATTR_ACCT_INTERIM_INTERVAL    85
 
 
 #define D_ATTR_MAX_KNOWN_TYPE           85
@@ -259,6 +267,11 @@ enum class RADIUSAcctStatusType {
 // max length of User-Password attribute
 #define D_USER_PASSWORD_MAX_LENGTH    128
 #define CHAP_VALUE_LENGTH             16
+
+// max length of the value of a single attribute (RFC 2865: attribute length is 1 byte, 2 bytes are header)
+#define D_ATTR_MAX_VALUE_LENGTH       253
+// Message-Authenticator (RFC 3579) value length (HMAC-MD5)
+#define D_MESSAGE_AUTHENTICATOR_LENGTH 16
 
 
 class RadiusPacket;
@@ -292,6 +305,12 @@ public:
     
     /// Dump attribute in readable text format to the STDOUT
     void dump();
+
+    /// By default dump() hides decrypted passwords. Enable only for debugging.
+    static void setDumpPasswords(bool p_enable);
+
+    /// true when the attribute header is sane and the whole attribute lies inside the packet
+    bool isWellFormed(void);
 
     
     /// Init attribute
@@ -548,6 +567,10 @@ public:
      */
 	int setVendorIPAddress(struct in_addr p_address);
 
+    /// Set a complete Vendor-Specific attribute (Vendor-Id, Vendor-Type, Vendor-Length and data)
+    /// in one call. Example: Mikrotik-Rate-Limit: vendorId 14988, vendorType 8, "10M/10M"
+    int setVendorAttribute(uint32_t p_vendorId, unsigned char p_vendorType, const void * p_data, uint16_t p_length);
+
 
     /// Get value of the string Vendor-Specific attribute
     /**
@@ -757,11 +780,18 @@ public:
 
 private:
 
+    // attribute is valid, has at least p_minLength bytes (header included) and fits into the packet
+    bool fits(uint8_t p_minLength);
+
+    // reserve room for a NEW attribute at the end of the packet / undo it
+    int reserve(uint16_t p_length);
+    void release(void);
+
     // Get pointer to the attribute raw data
     unsigned char * getRawData(void);
 
     // Types of attribute data
-    typedef enum AttributeFormat_e
+    enum AttributeFormat_e
     {
         E_ATTR_FORMAT_INTEGER,
         E_ATTR_FORMAT_IP_ADDRESS,
