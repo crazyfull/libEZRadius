@@ -1,5 +1,5 @@
 # built from the top level CMakeLists.txt (target EZRadius)
-foreach(name server client coa)
+foreach(name server client client_sync coa)
     add_executable(ezradius_${name} ${name}.cpp)
     target_link_libraries(ezradius_${name} PRIVATE EZRadius)
 endforeach()
