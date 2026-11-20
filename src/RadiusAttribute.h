@@ -75,7 +75,7 @@ enum RADIUSAttribute {
     CHAP_CHALLENGE = 60,
     NAS_PORT_TYPE = 61,
     PORT_LIMIT = 62,
-    LOGIN_LAT_PROMPT = 63,
+    LOGIN_LAT_PROMPT = 63,      // old (wrong) name, kept for compatibility: use LOGIN_LAT_PORT
     TUNNEL_TYPE = 64,
     TUNNEL_MEDIUM_TYPE = 65,
     TUNNEL_CLIENT_ENDPOINT = 66,
