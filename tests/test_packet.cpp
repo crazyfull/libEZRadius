@@ -58,6 +58,24 @@ static void test_pap_roundtrip()
     CHECK(a.setUserPassword(std::string(129,'p').c_str()) != RC_SUCCESS);
 }
 
+// RFC 2865 section 7.1 (Access-Request example): secret "xyzzy5461", user "nemo", password "arctangent"
+static void test_rfc2865_pap_vector()
+{
+    static const unsigned char reqAuth[16] = {0x0f,0x40,0x3f,0x94,0x73,0x97,0x80,0x57,0xbd,0x83,0xd5,0xcb,0x98,0xf4,0x22,0x7a};
+    static const unsigned char expected[16] = {0x0d,0xbe,0x70,0x8d,0x93,0xd4,0x13,0xce,0x31,0x96,0xe4,0x3f,0x78,0x2a,0x0a,0xee};
+    RadiusSecret s("xyzzy5461");
+    RadiusPacket p(1); p.setSecret(&s);
+    p.setID(0);
+    p.setAuthenticator(reqAuth);
+    RadiusAttribute a;
+    p.addAttribute(D_ATTR_USER_NAME, a); a.setString("nemo");
+    p.addAttribute(D_ATTR_USER_PASSWORD, a); CHECK(a.setUserPassword("arctangent") == RC_SUCCESS);
+    const unsigned char *raw = p.getRawData();
+    // User-Name (2+4) then User-Password (2+16): the encrypted block starts at 20+6+2
+    CHECK(p.getLength() == 20 + 6 + 18);
+    CHECK(memcmp(raw + 28, expected, 16) == 0);
+}
+
 static void test_malformed()
 {
     RadiusSecret s("x");
@@ -152,7 +170,7 @@ static void test_vsa()
 
 int main()
 {
-    test_md5_hmac(); test_secret(); test_pap_roundtrip(); test_malformed();
+    test_md5_hmac(); test_rfc2865_pap_vector(); test_secret(); test_pap_roundtrip(); test_malformed();
     test_limits(); test_response_auth(); test_accounting_auth(); test_vsa();
     printf(g_fail ? "FAILED (%d)\n" : "all packet tests passed\n", g_fail);
     return g_fail ? 1 : 0;
