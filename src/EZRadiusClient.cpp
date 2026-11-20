@@ -1,5 +1,6 @@
 #include "EZRadiusClient.h"
 #include "EZAttrUtil.h"
+#include "EZAddr.h"
 #include "md5.h"
 #include "clsUDPSocket.h"
 #include "clsEpollReactor.h"
@@ -32,6 +33,7 @@ public:
 EZRadiusClient::EZRadiusClient(netrector::EpollReactor *reactor, const EZClientSettings &Settings)
     : m_pReactor(reactor), m_settings(Settings)
 {
+    memset(&m_server, 0, sizeof(m_server));
     m_Secret.setSecret(m_settings.Secret.c_str(), (uint16_t)strnlen(m_settings.Secret.c_str(), D_SECRET_MAX_LENGTH + 1));
     m_RequestPck.setSecret(&m_Secret);
     m_RequestPck.randomID();
@@ -145,47 +147,79 @@ bool EZRadiusClient::AddVendorAttribute(uint32_t vendorId, unsigned char vendorT
     return len <= 255 && AddVendorAttribute(vendorId, vendorType, text, (uint16_t)len);
 }
 
+bool EZRadiusClient::resolve(int qtype)
+{
+    m_dnsPending = true;
+    bool ok = m_pReactor->getIPbyName(m_settings.Host.c_str(),
+        (netrector::DNSLookup::callback_t)[](const char *h, char **ips, size_t c, netrector::DNSLookup::QUERY_TYPE q, void *u){ onResolved(h, ips, c, (int)q, u); },
+        this, (netrector::DNSLookup::QUERY_TYPE)qtype);
+    if(!ok)
+        m_dnsPending = false;
+    return ok;
+}
+
 bool EZRadiusClient::Send(RADIUSClientRequestType RequestType, const Callback &callback)
 {
     if(m_state != State::Idle || !m_pReactor || m_Secret.isEmpty())
         return false;
-    if(RequestType != C_ACCESS_REQUEST && RequestType != C_ACCOUNTING_REQUEST)
+
+    int port = 0;
+    switch(RequestType){
+    case C_ACCESS_REQUEST:
+    case C_STATUS_SERVER:
+        port = m_settings.AuthenticationPort; break;
+    case C_ACCOUNTING_REQUEST:
+        port = m_settings.AccountingPort; break;
+    case C_DISCONNECT_REQUEST:
+    case C_COA_REQUEST:
+        port = m_settings.CoAPort; break;
+    default:
+        return false;
+    }
+    if(port <= 0 || port > 65535)
         return false;
 
     m_type = RequestType;
-    m_serverPort = (uint16_t)(RequestType == C_ACCESS_REQUEST ? m_settings.AuthenticationPort : m_settings.AccountingPort);
+    m_serverPort = (uint16_t)port;
     m_maxAttempts = m_settings.RetryCount < 1 ? 1 : m_settings.RetryCount;
-    if(m_serverPort == 0)
-        return false;
 
     m_RequestPck.setCode((unsigned char)RequestType);
-    if(RequestType == C_ACCOUNTING_REQUEST){
-        // Request Authenticator of an accounting request depends on the final packet content
+    switch(RequestType){
+    case C_ACCOUNTING_REQUEST:
+    case C_DISCONNECT_REQUEST:
+    case C_COA_REQUEST:
+        // Request Authenticator = MD5(packet with zero authenticator + secret): depends on the final packet content
         if(!m_RequestPck.accountingRequestAuthenticator())
             return false;
-    }else if(m_settings.UseMessageAuthenticator){
+        break;
+    case C_STATUS_SERVER:
+        // Message-Authenticator is mandatory (RFC 5997); the Request Authenticator is random
         if(!m_RequestPck.addMessageAuthenticator() || !m_RequestPck.signMessageAuthenticator())
             return false;
+        break;
+    default:
+        if(m_settings.UseMessageAuthenticator){
+            if(!m_RequestPck.addMessageAuthenticator() || !m_RequestPck.signMessageAuthenticator())
+                return false;
+        }
+        break;
     }
 
     m_callback = callback;
     m_state = State::Running;
     m_result = EZResult::NONE;
     m_attempt = 0;
+    m_triedAAAA = false;
 
-    struct in_addr ip;
-    if(inet_pton(AF_INET, m_settings.Host.c_str(), &ip) == 1){
-        startWithAddress(ip.s_addr);
+    struct sockaddr_storage ss;
+    socklen_t len = 0;
+    if(ezaddr::parse(m_settings.Host.c_str(), m_serverPort, ss, len)){
+        startWithAddress((const struct sockaddr*)&ss, len);
         return true;
     }
 
     // host name: asynchronous DNS (the callback can be called before getIPbyName returns: DNS cache)
-    m_dnsPending = true;
-    bool ok = m_pReactor->getIPbyName(m_settings.Host.c_str(),
-        (netrector::DNSLookup::callback_t)[](const char *h, char **ips, size_t c, netrector::DNSLookup::QUERY_TYPE q, void *u){ onResolved(h, ips, c, (int)q, u); },
-        this, netrector::DNSLookup::A);
-    if(!ok){
-        m_dnsPending = false;
+    if(!resolve(netrector::DNSLookup::A)){
         m_state = State::Idle;
         m_callback = nullptr;
         return false;
@@ -193,30 +227,38 @@ bool EZRadiusClient::Send(RADIUSClientRequestType RequestType, const Callback &c
     return true;
 }
 
-void EZRadiusClient::onResolved(const char *, char **ips, size_t count, int, void *user_data)
+void EZRadiusClient::onResolved(const char *, char **ips, size_t count, int qtype, void *user_data)
 {
     EZRadiusClient *pThis = static_cast<EZRadiusClient*>(user_data);
     pThis->m_dnsPending = false;
     if(pThis->m_state != State::Running)
         return;
 
-    struct in_addr ip;
-    if(count == 0 || !ips || !ips[0] || inet_pton(AF_INET, ips[0], &ip) != 1){
+    struct sockaddr_storage ss;
+    socklen_t len = 0;
+    if(count == 0 || !ips || !ips[0] || !ezaddr::parse(ips[0], pThis->m_serverPort, ss, len)){
+        // no IPv4 address: try IPv6
+        if(qtype == netrector::DNSLookup::A && !pThis->m_triedAAAA){
+            pThis->m_triedAAAA = true;
+            if(pThis->resolve(netrector::DNSLookup::AAAA))
+                return;
+        }
         pThis->finish(EZResult::DNS_FAILED);
         return;
     }
-    pThis->startWithAddress(ip.s_addr);
+    pThis->startWithAddress((const struct sockaddr*)&ss, len);
 }
 
-void EZRadiusClient::startWithAddress(uint32_t ip)
+void EZRadiusClient::startWithAddress(const struct sockaddr *address, socklen_t len)
 {
-    m_serverIP = ip;
+    memcpy(&m_server, address, len);
+    m_serverLen = len;
 
     auto *sock = new EZClientSocket;
     sock->owner = this;
     sock->setReactor(m_pReactor);
     sock->setMaxDatagramSize(D_RADIUS_PACKET_MAX_LENGTH);
-    if(!sock->open(AF_INET)){
+    if(!sock->open(address->sa_family)){
         sock->owner = nullptr;
         sock->close();
         finish(EZResult::SEND_FAILED);
@@ -228,15 +270,9 @@ void EZRadiusClient::startWithAddress(uint32_t ip)
 
 void EZRadiusClient::transmit()
 {
-    struct sockaddr_in to;
-    memset(&to, 0, sizeof(to));
-    to.sin_family = AF_INET;
-    to.sin_port = htons(m_serverPort);
-    to.sin_addr.s_addr = m_serverIP;
-
     m_attempt++;
     // a failed sendto (full kernel buffer) is handled like a lost packet: the timer retries
-    m_pSocket->sendTo(m_RequestPck.getRawData(), m_RequestPck.getLength(), (const struct sockaddr*)&to, sizeof(to));
+    m_pSocket->sendTo(m_RequestPck.getRawData(), m_RequestPck.getLength(), (const struct sockaddr*)&m_server, m_serverLen);
 
     m_timerId = m_pReactor->addTimer(m_settings.TimeOut < 1 ? 1 : m_settings.TimeOut, [this]{ m_timerId = -1; onTimeout(); }, true);
     if(m_timerId < 0)
@@ -256,11 +292,13 @@ void EZRadiusClient::onTimeout()
 
 void EZRadiusClient::onDatagram(const uint8_t *data, size_t len, const struct sockaddr *from)
 {
-    if(m_state != State::Running || !from || from->sa_family != AF_INET)
+    if(m_state != State::Running || !from)
         return;
 
-    const struct sockaddr_in *in = (const struct sockaddr_in*)from;
-    if(in->sin_addr.s_addr != m_serverIP || ntohs(in->sin_port) != m_serverPort)
+    // only the server we asked may answer (IPv4-mapped IPv6 addresses compare equal to IPv4)
+    unsigned char a[16], b[16];
+    if(!ezaddr::toKey(from, a) || !ezaddr::toKey((const struct sockaddr*)&m_server, b)
+       || memcmp(a, b, 16) != 0 || ezaddr::portOf(from) != m_serverPort)
         return;
 
     RadiusPacket resp;
@@ -270,7 +308,15 @@ void EZRadiusClient::onDatagram(const uint8_t *data, size_t len, const struct so
     // right kind of response for this request
     const unsigned char code = resp.getCode();
     const bool accessResp = (code == ACCESS_ACCEPT || code == ACCESS_REJECT || code == ACCESS_CHALLENGE);
-    if(m_type == C_ACCESS_REQUEST ? !accessResp : code != ACCOUNTING_RESPONSE)
+    bool expected = false;
+    switch(m_type){
+    case C_ACCESS_REQUEST:      expected = accessResp; break;
+    case C_ACCOUNTING_REQUEST:  expected = (code == ACCOUNTING_RESPONSE); break;
+    case C_STATUS_SERVER:       expected = (code == ACCESS_ACCEPT || code == ACCOUNTING_RESPONSE); break;
+    case C_DISCONNECT_REQUEST:  expected = (code == DISCONNECT_ACK || code == DISCONNECT_NAK); break;
+    case C_COA_REQUEST:         expected = (code == COA_ACK || code == COA_NAK); break;
+    }
+    if(!expected)
         return;
 
     // ID + Response Authenticator (needs the Request Authenticator, so the request must be unchanged)
