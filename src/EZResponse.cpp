@@ -102,7 +102,7 @@ static bool addVendorNumber(RadiusPacket &pck, unsigned char type, uint32_t valu
 
 bool EZResponse::Send(RADIUSPacketTypeCodes code, EZRadiusClientIdentify *ClientIdentify)
 {
-    if(!ClientIdentify || !ClientIdentify->Socket() || !ClientIdentify->RAS())
+    if(!ClientIdentify || (!ClientIdentify->Socket() && !ClientIdentify->channel()) || !ClientIdentify->RAS())
         return false;
 
     // keeps the RAS (and its secret) alive even if it is removed from the list meanwhile
@@ -152,8 +152,12 @@ bool EZResponse::Send(RADIUSPacketTypeCodes code, EZRadiusClientIdentify *Client
     if(!m_Pck.responseAuthenticator())
         return false;
 
-    if(!ClientIdentify->Socket()->sendTo(m_Pck.getRawData(), m_Pck.getLength(), ClientIdentify->Peer(), ClientIdentify->PeerLen()))
+    if(ClientIdentify->channel()){
+        if(!ClientIdentify->channel()->send(m_Pck.getRawData(), m_Pck.getLength(), *ClientIdentify))
+            return false;
+    }else if(!ClientIdentify->Socket()->sendTo(m_Pck.getRawData(), m_Pck.getLength(), ClientIdentify->Peer(), ClientIdentify->PeerLen())){
         return false;
+    }
 
     // remember the answer: a retransmitted request gets the same answer without being processed again
     if(ClientIdentify->dedup())

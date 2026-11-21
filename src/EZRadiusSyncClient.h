@@ -56,6 +56,7 @@ public:
     void Reset();
 
     EZResult Result() const { return m_result; }
+    bool UsedRadius11() { return m_client->UsedRadius11(); }
     RADIUSPacketTypeCodes GetResponseType() { return m_client->GetResponseType(); }
     const char* GetResponseTypeDescription() { return m_client->GetResponseTypeDescription(); }
     AttrValue GetAttribute(RADIUSAttribute AttrType) { return m_client->GetAttribute(AttrType); }

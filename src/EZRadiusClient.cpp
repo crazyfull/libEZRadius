@@ -4,6 +4,7 @@
 #include "md5.h"
 #include "EZCrypto.h"
 #include "EZVendor.h"
+#include "EZTLS.h"
 #ifdef EZRADIUS_HAS_CRYPTO
 #include "EZEAP.h"
 #endif
@@ -39,6 +40,11 @@ EZRadiusClient::EZRadiusClient(netrector::EpollReactor *reactor, const EZClientS
     : m_pReactor(reactor), m_settings(Settings)
 {
     memset(&m_server, 0, sizeof(m_server));
+    // RFC 6614 / draft-ietf-radext-radiusdtls-bis: fixed shared secrets over TLS and DTLS
+    if(m_settings.Transport == EZTransport::TLS)
+        m_settings.Secret = "radsec";
+    else if(m_settings.Transport == EZTransport::DTLS)
+        m_settings.Secret = "radius/dtls";
     m_Secret.setSecret(m_settings.Secret.c_str(), (uint16_t)strnlen(m_settings.Secret.c_str(), D_SECRET_MAX_LENGTH + 1));
     m_RequestPck.setSecret(&m_Secret);
     m_RequestPck.randomID();
@@ -50,12 +56,17 @@ EZRadiusClient::~EZRadiusClient()
     releaseResources();
 }
 
-void EZRadiusClient::releaseResources()
+void EZRadiusClient::releaseResources(bool keepConnection)
 {
     if(m_timerId >= 0){
         if(m_pReactor)
             m_pReactor->removeTimer(m_timerId);
         m_timerId = -1;
+    }
+    if(m_dtlsTimer >= 0){
+        if(m_pReactor)
+            m_pReactor->removeTimer(m_dtlsTimer);
+        m_dtlsTimer = -1;
     }
     if(m_dnsPending){
         if(m_pReactor)
@@ -67,11 +78,13 @@ void EZRadiusClient::releaseResources()
         m_pSocket->close();         // autoDelete: deleted later by the reactor
         m_pSocket = nullptr;
     }
+    if(!keepConnection)
+        closeStream();
 }
 
 void EZRadiusClient::Reset()
 {
-    releaseResources();
+    releaseResources(true);         // an open connection stays for the next request
     m_callback = nullptr;
     m_RequestPck = RadiusPacket();
     m_RequestPck.setSecret(&m_Secret);
@@ -324,6 +337,8 @@ bool EZRadiusClient::Send(RADIUSClientRequestType RequestType, const Callback &c
     default:
         return false;
     }
+    if(m_settings.Transport == EZTransport::TLS || m_settings.Transport == EZTransport::DTLS)
+        port = m_settings.RadSecPort;
     if(port <= 0 || port > 65535)
         return false;
 
@@ -358,6 +373,31 @@ bool EZRadiusClient::Send(RADIUSClientRequestType RequestType, const Callback &c
     m_result = EZResult::NONE;
     m_attempt = 0;
     m_triedAAAA = false;
+
+#ifdef EZRADIUS_HAS_TLS
+    if((m_settings.Transport == EZTransport::TLS || m_settings.Transport == EZTransport::DTLS) && !m_tlsCtx){
+        std::string err;
+        m_tlsCtx = EZTLSContext::create(m_settings.TLS, false, m_settings.Transport == EZTransport::DTLS, &err);
+        if(!m_tlsCtx){
+            NR_LOG(netrector::LOG_ERROR, "EZRadiusClient: TLS configuration: %s", err.c_str());
+            m_state = State::Idle;
+            m_callback = nullptr;
+            return false;
+        }
+    }
+#else
+    if(m_settings.Transport == EZTransport::TLS || m_settings.Transport == EZTransport::DTLS){
+        m_state = State::Idle;
+        m_callback = nullptr;
+        return false;           // built without TLS support
+    }
+#endif
+
+    // a connection that is still open is used again (no DNS, no new handshake)
+    if(streamTransport() && m_conn && m_haveServer && m_connPort == m_serverPort && m_framer.buffered() == 0){
+        transmitStream();
+        return true;
+    }
 
     struct sockaddr_storage ss;
     socklen_t len = 0;
@@ -401,6 +441,10 @@ void EZRadiusClient::startWithAddress(const struct sockaddr *address, socklen_t 
 {
     memcpy(&m_server, address, len);
     m_serverLen = len;
+    if(streamTransport()){
+        startStream();
+        return;
+    }
 
     auto *sock = new EZClientSocket;
     sock->owner = this;
@@ -413,6 +457,10 @@ void EZRadiusClient::startWithAddress(const struct sockaddr *address, socklen_t 
         return;
     }
     m_pSocket = sock;
+    if(m_settings.Transport == EZTransport::DTLS){
+        startDtls();
+        return;
+    }
     transmit();
 }
 
@@ -420,7 +468,10 @@ void EZRadiusClient::transmit()
 {
     m_attempt++;
     // a failed sendto (full kernel buffer) is handled like a lost packet: the timer retries
-    m_pSocket->sendTo(m_RequestPck.getRawData(), m_RequestPck.getLength(), (const struct sockaddr*)&m_server, m_serverLen);
+    if(m_settings.Transport == EZTransport::DTLS)
+        sendRequest();              // a retransmission is a new DTLS record carrying the same RADIUS packet
+    else
+        m_pSocket->sendTo(m_RequestPck.getRawData(), m_RequestPck.getLength(), (const struct sockaddr*)&m_server, m_serverLen);
 
     m_timerId = m_pReactor->addTimer(m_settings.TimeOut < 1 ? 1 : m_settings.TimeOut, [this]{ m_timerId = -1; onTimeout(); }, true);
     if(m_timerId < 0)
@@ -431,6 +482,10 @@ void EZRadiusClient::onTimeout()
 {
     if(m_state != State::Running)
         return;
+    if(m_settings.Transport == EZTransport::DTLS && !m_haveServer){
+        finish(EZResult::TIMEOUT);          // the DTLS handshake did not finish
+        return;
+    }
     if(m_attempt >= m_maxAttempts){
         finish(EZResult::TIMEOUT);
         return;
@@ -448,7 +503,17 @@ void EZRadiusClient::onDatagram(const uint8_t *data, size_t len, const struct so
     if(!ezaddr::toKey(from, a) || !ezaddr::toKey((const struct sockaddr*)&m_server, b)
        || memcmp(a, b, 16) != 0 || ezaddr::portOf(from) != m_serverPort)
         return;
+    if(m_settings.Transport == EZTransport::DTLS){
+        dtlsDatagram(data, len);
+        return;
+    }
+    handleResponse(data, len);
+}
 
+void EZRadiusClient::handleResponse(const uint8_t *data, size_t len)
+{
+    if(m_state != State::Running)
+        return;
     RadiusPacket resp;
     if(!resp.setRawData((const char*)data, (int)len))
         return;
@@ -475,7 +540,7 @@ void EZRadiusClient::onDatagram(const uint8_t *data, size_t len, const struct so
     if(resp.hasMessageAuthenticator()){
         if(!resp.verifyMessageAuthenticator(m_RequestPck.getAuthenticator(), &m_Secret))
             return;
-    }else if(accessResp && m_settings.RequireMessageAuthenticator){
+    }else if(accessResp && m_settings.RequireMessageAuthenticator && !m_radius11){
         return;
     }
 
@@ -492,7 +557,7 @@ void EZRadiusClient::Cancel()
 
 void EZRadiusClient::finish(EZResult result)
 {
-    releaseResources();
+    releaseResources(streamTransport() && m_settings.ReuseConnection && result == EZResult::OK);
     m_state = State::Done;
     m_result = result;
 
