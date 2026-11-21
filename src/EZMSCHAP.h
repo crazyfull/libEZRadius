@@ -56,6 +56,9 @@ public:
     static void MppeSessionKeys(const uint8_t masterKey[16], uint8_t sendKey[16], uint8_t recvKey[16]);
 
     // RFC 2548 section 2.4.2 encryption of a key attribute value (Salt + encrypted key, 34 bytes)
+    // Any key length 1..238 (EAP uses 32 byte keys). Returns an empty string for an invalid length.
+    static std::string EncodeMppeKey(const uint8_t *key, size_t keyLen, const void *secret, size_t secretLen, const uint8_t requestAuthenticator[16]);
+    static bool DecodeMppeKey(const std::string &value, const void *secret, size_t secretLen, const uint8_t requestAuthenticator[16], std::string &key);
     static std::string EncodeMppeKey(const uint8_t key[16], const void *secret, size_t secretLen, const uint8_t requestAuthenticator[16]);
     static bool DecodeMppeKey(const std::string &value, const void *secret, size_t secretLen, const uint8_t requestAuthenticator[16], uint8_t key[16]);
 
