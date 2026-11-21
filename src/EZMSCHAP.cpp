@@ -147,21 +147,24 @@ void EZMSCHAP::MppeSessionKeys(const uint8_t master[16], uint8_t sendKey[16], ui
     derive(magic2, sizeof(magic2) - 1, recvKey);
 }
 
-std::string EZMSCHAP::EncodeMppeKey(const uint8_t key[16], const void *secret, size_t secretLen, const uint8_t ra[16])
+std::string EZMSCHAP::EncodeMppeKey(const uint8_t *key, size_t keyLen, const void *secret, size_t secretLen, const uint8_t ra[16])
 {
+    if(keyLen == 0 || keyLen > 238)        // the plain text (length byte + key + padding) must fit in 239 bytes
+        return std::string();
+
     // Salt: random, most significant bit set
     uint8_t salt[2];
     EZCrypto::Random(salt, 2);
     salt[0] |= 0x80;
 
-    uint8_t plain[32];
-    memset(plain, 0, sizeof(plain));
-    plain[0] = 16;                          // key length
-    memcpy(plain + 1, key, 16);
+    const size_t blocks = (1 + keyLen + 15) / 16;
+    std::string plain(blocks * 16, '\0');
+    plain[0] = (char)keyLen;
+    memcpy(&plain[1], key, keyLen);
 
     std::string out((const char*)salt, 2);
     uint8_t prev[16];
-    for(int block = 0; block < 2; block++){
+    for(size_t block = 0; block < blocks; block++){
         std::string in((const char*)secret, secretLen);
         if(block == 0){
             in.append((const char*)ra, 16);
@@ -172,22 +175,30 @@ std::string EZMSCHAP::EncodeMppeKey(const uint8_t key[16], const void *secret, s
         uint8_t b[16];
         EZCrypto::MD5(in.data(), in.size(), b);
         for(int i = 0; i < 16; i++)
-            prev[i] = plain[block * 16 + i] ^ b[i];
+            prev[i] = (uint8_t)plain[block * 16 + i] ^ b[i];
         out.append((const char*)prev, 16);
     }
-    EZCrypto::Wipe(plain, sizeof(plain));
+    EZCrypto::Wipe(&plain[0], plain.size());
     return out;
 }
 
-bool EZMSCHAP::DecodeMppeKey(const std::string &value, const void *secret, size_t secretLen, const uint8_t ra[16], uint8_t key[16])
+std::string EZMSCHAP::EncodeMppeKey(const uint8_t key[16], const void *secret, size_t secretLen, const uint8_t ra[16])
 {
-    if(value.size() != 34)
+    return EncodeMppeKey(key, 16, secret, secretLen, ra);
+}
+
+bool EZMSCHAP::DecodeMppeKey(const std::string &value, const void *secret, size_t secretLen, const uint8_t ra[16], std::string &key)
+{
+    key.clear();
+    // Salt (2) + at least one 16 byte block, whole blocks only
+    if(value.size() < 18 || (value.size() - 2) % 16 != 0)
         return false;
 
-    uint8_t plain[32];
+    const size_t blocks = (value.size() - 2) / 16;
+    std::string plain(blocks * 16, '\0');
     const uint8_t *cipher = (const uint8_t*)value.data() + 2;
     uint8_t prevCipher[16];
-    for(int block = 0; block < 2; block++){
+    for(size_t block = 0; block < blocks; block++){
         std::string in((const char*)secret, secretLen);
         if(block == 0){
             in.append((const char*)ra, 16);
@@ -198,14 +209,25 @@ bool EZMSCHAP::DecodeMppeKey(const std::string &value, const void *secret, size_
         uint8_t b[16];
         EZCrypto::MD5(in.data(), in.size(), b);
         for(int i = 0; i < 16; i++)
-            plain[block * 16 + i] = cipher[block * 16 + i] ^ b[i];
+            plain[block * 16 + i] = (char)(cipher[block * 16 + i] ^ b[i]);
         memcpy(prevCipher, cipher + block * 16, 16);
     }
-    bool ok = (plain[0] == 16);
+    const size_t len = (uint8_t)plain[0];
+    const bool ok = len >= 1 && len <= plain.size() - 1;
     if(ok)
-        memcpy(key, plain + 1, 16);
-    EZCrypto::Wipe(plain, sizeof(plain));
+        key.assign(plain, 1, len);
+    EZCrypto::Wipe(&plain[0], plain.size());
     return ok;
+}
+
+bool EZMSCHAP::DecodeMppeKey(const std::string &value, const void *secret, size_t secretLen, const uint8_t ra[16], uint8_t key[16])
+{
+    std::string k;
+    if(!DecodeMppeKey(value, secret, secretLen, ra, k) || k.size() != 16)
+        return false;
+    memcpy(key, k.data(), 16);
+    EZCrypto::Wipe(&k[0], k.size());
+    return true;
 }
 
 // ---------------------------------------------------------------------------------------------

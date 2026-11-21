@@ -53,6 +53,11 @@ public:
     bool AddAttribute(RADIUSAttribute AttType, int value);
     bool AddVendorAttribute(uint32_t vendorId, unsigned char vendorType, const void *data, uint16_t length);
     bool AddVendorAttribute(uint32_t vendorId, unsigned char vendorType, const char *text);
+    // vendor attribute by dictionary name (see EZVendorDict.h)
+    bool AddVendorAttribute(const char *name, const char *text);
+    bool AddVendorAttribute(const char *name, uint32_t number);
+    // binary safe attribute of any type (0..253 bytes), e.g. EAP-Message (long EAP packets need several attributes)
+    bool AddRawAttribute(RADIUSAttribute AttType, const void *data, size_t length);
 
 #ifdef EZRADIUS_HAS_CRYPTO
     // MS-CHAPv2 / MS-CHAPv1 login (needs EZRADIUS_HAS_CRYPTO). They add User-Name too, so do not add it yourself.
@@ -63,6 +68,12 @@ public:
     bool MSCHAPv2ServerVerified();
     // MS-MPPE-Send-Key / MS-MPPE-Recv-Key values of the response (decrypted)
     bool GetMPPEKeys(uint8_t sendKey[16], uint8_t recvKey[16]);
+    // EAP (see EZEAP.h): add the EAP packet as EAP-Message attributes / read the EAP packet and State of the response
+    bool AddEAPMessage(const std::string &eapPacket);
+    std::string GetEAPMessage();
+    std::string GetState();
+    // same for keys of any length (EAP: 32 bytes each)
+    bool GetMPPEKeys(std::string &sendKey, std::string &recvKey);
 #endif
 
     // Start the request and return at once; callback is called (once) from the reactor when it is finished.
