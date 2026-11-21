@@ -590,7 +590,7 @@ EZEAPResult EZEAPServer::Process(RadiusPacket &request, EZRadiusClientIdentify &
         return EZEAPResult::NOT_EAP;
 
     // RFC 3579 section 3.2: an Access-Request with EAP-Message must be authenticated by a Message-Authenticator
-    if(!from.RequestHadMessageAuthenticator())
+    if(!from.RequestHadMessageAuthenticator() && !from.isRadius11())
         return EZEAPResult::ERROR;
 
     purge();

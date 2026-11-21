@@ -1,6 +1,8 @@
 #ifndef EZCLIENTSETTINGS_H
 #define EZCLIENTSETTINGS_H
 #include <string>
+#include "EZTransport.h"
+#include "EZTLS.h"
 
 class EZClientSettings
 {
@@ -15,6 +17,21 @@ public:
     int AccountingPort = 1813;
     int CoAPort = 3799;
     int AcctInterimIntravel = 0;
+
+    // Transport: UDP (default), TCP (RFC 6613), TLS (RadSec, RFC 6614) or DTLS (RFC 7360).
+    // TCP uses the Authentication / Accounting / CoA ports above (TCP, same numbers); TLS and DTLS use RadSecPort.
+    // Over TLS the shared secret is the fixed string "radsec", over DTLS "radius/dtls" (Secret is ignored).
+    EZTransport Transport = EZTransport::UDP;
+    int RadSecPort = 2083;
+    // TCP / TLS / DTLS: keep the connection open after a request and use it for the next request of the same
+    // client object (a new connection is made when it was closed). RADIUS over TCP does not retransmit on a
+    // connection: RetryCount > 1 means "reconnect and send again".
+    bool ReuseConnection = true;
+
+#ifdef EZRADIUS_HAS_TLS
+    // TLS / DTLS settings (certificates, trust, server name, RADIUS/1.1 negotiation): see EZTLS.h
+    EZTLSConfig TLS;
+#endif
 
     // RADIUS server (IPv4 address or host name; names are resolved asynchronously)
     std::string Host;

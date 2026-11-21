@@ -6,10 +6,14 @@
 #include "EZClientSettings.h"
 #include "EZMSCHAP.h"
 #include <functional>
+#include <memory>
 #include <string>
 #include <sys/socket.h>
 
 namespace netrector { class EpollReactor; class UDPSocket; }
+class EZClientStreamConn;
+class EZTLSEngine;
+class EZTLSContext;
 
 enum class EZResult {
     NONE = 0,           // nothing sent yet / request in progress
@@ -88,6 +92,8 @@ public:
 
     bool isBusy() const { return m_state == State::Running; }
     EZResult Result() const { return m_result; }
+    // TLS: true when the last connection negotiated RADIUS/1.1 (RFC 9765)
+    bool UsedRadius11() const { return m_negotiated11; }
 
     RADIUSPacketTypeCodes GetResponseType();
     const char* GetResponseTypeDescription();
@@ -108,6 +114,14 @@ private:
     EZResult m_result = EZResult::NONE;
 
     netrector::UDPSocket *m_pSocket = nullptr;
+    EZClientStreamConn *m_conn = nullptr;       // TCP / TLS connection (kept between requests when ReuseConnection)
+    EZStreamFramer m_framer;
+    EZTLSEngine *m_tls = nullptr;               // TLS engine of the connection (TLS transport)
+    std::shared_ptr<EZTLSContext> m_tlsCtx;
+    bool m_radius11 = false;                    // the connection speaks RADIUS/1.1 (RFC 9765)
+    bool m_negotiated11 = false;
+    bool sendRequest();
+    bool flushTls();
     int m_timerId = -1;
     bool m_dnsPending = false;
     int m_attempt = 0;
@@ -134,10 +148,28 @@ private:
     void transmit();
     void onTimeout();
     void onDatagram(const uint8_t *data, size_t len, const struct sockaddr *from);
-    void releaseResources();
+    void handleResponse(const uint8_t *data, size_t len);
+    void releaseResources(bool keepConnection = false);
+
+    // stream transports (EZRadiusClientStream.cpp)
+    bool streamTransport() const { return m_settings.Transport == EZTransport::TCP || m_settings.Transport == EZTransport::TLS; }
+    void startDtls();
+    void dtlsDatagram(const uint8_t *data, size_t len);
+    void dtlsTick();
+    int m_dtlsTimer = -1;
+    void startStream();
+    void transmitStream();
+    void streamConnected();
+    void streamData(const uint8_t *data, size_t len);
+    void streamClosed();
+    void streamTimeout();
+    void closeStream();
+    bool m_haveServer = false;                  // m_conn is connected (and usable)
+    uint16_t m_connPort = 0;
     void finish(EZResult result);
 
     friend class EZClientSocket;
+    friend class EZClientStreamConn;
 };
 
 #endif // EZRADIUSCLIENT_H
