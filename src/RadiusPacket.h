@@ -10,6 +10,7 @@
 
 #include "RadiusAttribute.h"
 #include <string>
+#include <vector>
 
 
 // Radius packet code values (from RFC2865)
@@ -54,9 +55,14 @@ enum AttrValueTypes{
 };
 struct AttrValue
 {
+    //INTEGER: the number. CHAP: CHAP identifier. VENDOR_SPECIFIC: Vendor-Id
     uint32_t intValue = 0;
+    //STRING: raw bytes (may contain NULs). IP: dotted text. PASSWORD: decrypted PAP password.
+    //CHAP: the 16 byte CHAP response. VENDOR_SPECIFIC: data after the Vendor-Id
     std::string strValue;
     AttrValueTypes ValueType = ATTR_TYPE_FORMAT_STRING;
+    //true when the attribute exists in the packet and was decoded successfully
+    bool valid = false;
 };
 
 
@@ -70,12 +76,21 @@ public:
     RadiusPacket(const char* Data, int DataLength, unsigned char p_code = 0);
     RadiusPacket(unsigned char p_code, RadiusPacket & p_request);
     RadiusPacket(unsigned char p_code = 0);
-    RadiusPacket(const RadiusPacket & p_packet);
+    RadiusPacket(const RadiusPacket & p_packet) = default;
+    RadiusPacket & operator=(const RadiusPacket & p_packet) = default;
 
-    /// Destructor
+    /// Destructor (wipes the plain text passwords kept in the packet)
     ~RadiusPacket();
 
-    void setRawData(const char* Data, int DataLength);
+    /// Load a packet received from the network.
+    /// Returns false (and leaves an empty packet) when the data is not a well formed RADIUS packet:
+    /// length 20..4096, length field <= DataLength, every attribute length >= 2 and inside the packet.
+    /// Octets after the length given in the header are ignored (RFC 2865 section 3).
+    bool setRawData(const char* Data, int DataLength);
+
+    /// false when the packet was constructed from network data that failed validation
+    bool isValid(void) const { return m_valid; }
+
     unsigned char getCode(void);
 
     /// Get packet code description
@@ -122,6 +137,9 @@ public:
     int findAttribute(unsigned char p_attrType, RadiusAttribute & p_attr);
     AttrValue getAttribute(RADIUSAttribute attrType);
 
+    /// Get all attributes of the given type (attributes may repeat: Class, Reply-Message, Vendor-Specific ...)
+    std::vector<AttrValue> getAttributes(RADIUSAttribute attrType);
+
     /// Add new attribute to the packet
     int addAttribute(unsigned char p_attrType, RadiusAttribute & p_attr);
 
@@ -132,26 +150,60 @@ public:
     int adjustLength(uint16_t p_length);
 
 
-    /// Generate authenticator for response packet
-    void responseAuthenticator(RadiusSecret * p_secret = NULL);
+    /// Generate authenticator for response packet.
+    /// The authenticator field must contain the Request Authenticator before the call.
+    /// Returns false when no (non empty) secret is available.
+    bool responseAuthenticator(RadiusSecret * p_secret = NULL);
 
     /// Encode User-Password attribute
     void encodeUserPassword(void);
 
 
-    /// Generate authenticator for accounting request packet
-    void accountingRequestAuthenticator(RadiusSecret * p_secret = NULL);
+    /// Generate authenticator for accounting request packet (RFC 2866) and
+    /// for CoA / Disconnect request packets (RFC 5176): same algorithm.
+    bool accountingRequestAuthenticator(RadiusSecret * p_secret = NULL);
 
-    /// Verify RADIUS response
+    /// Verify the Request Authenticator of a received Accounting-Request / Disconnect-Request /
+    /// CoA-Request (MD5 over the packet with a zeroed authenticator + secret). Constant time compare.
+    bool verifyRequestAuthenticator(RadiusSecret * p_secret = NULL);
+
+    /// Verify RADIUS response (this packet = the request this response belongs to):
+    /// identifier and Response Authenticator are checked. Constant time compare.
     bool verifyResponse(RadiusPacket & p_packet);
 
-    AttrValueTypes getAttributeType(uint8_t attrType);
+    // ---------------------------------------------------------------
+    // Message-Authenticator (RFC 3579, HMAC-MD5). Recommended for every
+    // Access-Request / Access-Response (BlastRADIUS, CVE-2024-3596)
+    // ---------------------------------------------------------------
+
+    /// true when the packet contains a Message-Authenticator attribute
+    bool hasMessageAuthenticator(void);
+
+    /// Add an empty (zeroed) Message-Authenticator attribute (no-op when it already exists)
+    bool addMessageAuthenticator(void);
+
+    /// Calculate and store the Message-Authenticator value. Call it after all other attributes
+    /// are added and after the authenticator field has its final value
+    /// (for a response: the Request Authenticator; the Response Authenticator is calculated afterwards).
+    bool signMessageAuthenticator(RadiusSecret * p_secret = NULL);
+
+    /// Verify the Message-Authenticator. p_authenticator: when not NULL it is used instead of the
+    /// authenticator field of the packet (for a response: the Request Authenticator of the request).
+    bool verifyMessageAuthenticator(const unsigned char * p_authenticator = NULL, RadiusSecret * p_secret = NULL);
+
+    static AttrValueTypes getAttributeType(uint8_t attrType);
 private:
 
     friend class RadiusAttribute;
 
     /// Init packet
     void init(unsigned char p_code);
+
+    /// Clear packet content (secret is kept)
+    void resetBody(void);
+
+    /// secret to use: p_secret or the secret associated with the packet
+    bool resolveSecret(RadiusSecret * p_secret, const unsigned char * & p_data, uint16_t & p_length);
 
     /// Generate pseudo-random authenticator
     void randomAuthenticator(void);
@@ -164,6 +216,9 @@ private:
 
     /// RADIUS secret associated with this packet
     RadiusSecret * m_secret;
+
+    /// false when constructed from invalid network data
+    bool m_valid;
 
 
     /// User-Password attribute in unencrypted format

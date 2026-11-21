@@ -1,8 +1,6 @@
 #include "EZRASList.h"
-#include <Wrench/log.h>
 #include <arpa/inet.h>
-using namespace std;
-
+#include <cstring>
 
 RASItem::RASItem()
 {
@@ -12,142 +10,90 @@ RASItem::RASItem()
 RASItem::RASItem(const char *secret, uint32_t RASIP)
 {
     IP = RASIP;
-    Secret.setSecret(secret, strlen(secret));
+    if(secret)
+        Secret.setSecret(secret, (uint16_t)strnlen(secret, D_SECRET_MAX_LENGTH + 1));
 }
 
-void EZRASList::Init(int maximum)
+// dotted IPv4 text -> network byte order. false: not a valid IPv4 address
+// (inet_addr() can not be used: it returns INADDR_NONE for errors, which is also 255.255.255.255)
+static bool parseIPv4(const char *text, in_addr_t &out)
 {
-    if(m_pList == nullptr){
-        m_pList = new RASItem*[maximum+1];
-        m_MaximumCount = maximum;
+    if(!text)
+        return false;
 
-        for(uint32_t i = 0; i < m_MaximumCount; i++){
-            m_pList[i] = nullptr;
-        }
-    }
-}
+    struct in_addr addr;
+    if(inet_pton(AF_INET, text, &addr) != 1)
+        return false;
 
-void EZRASList::MutexLock()
-{
-    pthread_mutex_lock(&m_Mutex);
-}
-
-void EZRASList::MutexUnLock()
-{
-    pthread_mutex_unlock(&m_Mutex);
-}
-
-int EZRASList::GetAFree()
-{
-    for(uint32_t i = 0; i < m_MaximumCount;i++){
-        if(m_pList[i] == nullptr){
-            return i;
-        }
-    }
-    return -1;
-}
-
-int EZRASList::GetItemByIP(uint32_t IPAddress)
-{
-    for(uint32_t i = 0; i < m_MaximumCount;i++){
-        if(m_pList[i] != nullptr){
-            if(m_pList[i]->IP == IPAddress){
-                return i;
-                break;
-            }
-        }
-    }
-    return ISINVALID;
-}
-
-EZRASList::EZRASList()
-{
-    m_pList = nullptr;
-
-    //inition mutex
-    if (pthread_mutex_init(&m_Mutex, nullptr) != 0){
-        DebugPrint("pthread_mutex_init failed");
-        return;
-    }
-    Init(512);
+    out = addr.s_addr;
+    return true;
 }
 
 bool EZRASList::AddRAS(const char *Secret, const char* IPAddress)
 {
-    return AddRAS(Secret, inet_addr(IPAddress));
+    in_addr_t ip;
+    if(!parseIPv4(IPAddress, ip))
+        return false;
+
+    return AddRAS(Secret, ip);
 }
 
 bool EZRASList::AddRAS(const char *Secret, in_addr_t IPAddress)
 {
-    bool ret = false;
-    MutexLock();
+    if(m_map.find(IPAddress) != m_map.end())
+        return false;
 
-    // check ip exist
-    int index = GetItemByIP(IPAddress);
-
-    //if not exist continue
-    if(index == ISINVALID){
-        index = GetAFree();
-        if(index != ISINVALID){
-            //create RAS item
-            RASItem *pRAS = new RASItem(Secret, IPAddress);
-
-            //add RAS pointer to list
-            m_pList[index] = pRAS;
-
-            ret = true;
-            m_Count ++;
-        }
-    }
-
-    MutexUnLock();
-    return ret;
+    return SetRAS(Secret, IPAddress);
 }
 
-RASItem *EZRASList::GetRASByIP(uint32_t IPAddress)
+bool EZRASList::SetRAS(const char *Secret, const char *IPAddress)
 {
-    // search for an item by its IP
-    MutexLock();
-    RASItem * ret = nullptr;
-    int index = GetItemByIP(IPAddress);
-    if(index != ISINVALID){
-        ret = m_pList[index];
-    }
-    MutexUnLock();
-    return ret;
+    in_addr_t ip;
+    if(!parseIPv4(IPAddress, ip))
+        return false;
+
+    return SetRAS(Secret, ip);
+}
+
+bool EZRASList::SetRAS(const char *Secret, in_addr_t IPAddress)
+{
+    auto item = std::make_shared<RASItem>(Secret, IPAddress);
+
+    // a RAS without a (valid) secret can never authenticate anything
+    if(item->Secret.isEmpty())
+        return false;
+
+    m_map[IPAddress] = std::move(item);
+    return true;
+}
+
+std::shared_ptr<RASItem> EZRASList::GetRASByIP(uint32_t IPAddress) const
+{
+    auto it = m_map.find(IPAddress);
+    if(it == m_map.end())
+        return nullptr;
+
+    return it->second;
 }
 
 bool EZRASList::removeRASByIP(uint32_t IPAddress)
 {
-    bool ret = false;
-    MutexLock();
-    int index = GetItemByIP(IPAddress);
-    if(index != ISINVALID){
-        delete m_pList[index];
-        m_pList[index] = nullptr;
-        ret = true;
-    }
-    MutexUnLock();
-    return ret;
+    return m_map.erase(IPAddress) > 0;
 }
 
-bool EZRASList::isExist(in_addr_t IPAddress)
+bool EZRASList::removeRASByIP(const char *IPAddress)
 {
-    bool ret = false;
-    MutexLock();
-    int index = GetItemByIP(IPAddress);
-    if(index != ISINVALID){
-        ret = true;
-    }
-    MutexUnLock();
-    return ret;
+    in_addr_t ip;
+    return parseIPv4(IPAddress, ip) && removeRASByIP(ip);
 }
 
-bool EZRASList::isExist(const char *IPAddress)
+bool EZRASList::isExist(in_addr_t IPAddress) const
 {
-    return isExist(inet_addr(IPAddress));
+    return m_map.find(IPAddress) != m_map.end();
 }
 
-
-
-
+bool EZRASList::isExist(const char *IPAddress) const
+{
+    in_addr_t ip;
+    return parseIPv4(IPAddress, ip) && isExist(ip);
+}
