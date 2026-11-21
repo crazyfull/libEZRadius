@@ -33,6 +33,44 @@ bool EZResponse::AddVendorAttribute(uint32_t vendorId, unsigned char vendorType,
     return ezutil::addVendor(m_Pck, vendorId, vendorType, text, (uint16_t)len);
 }
 
+#ifdef EZRADIUS_HAS_CRYPTO
+bool EZResponse::AddMSCHAP2Success(uint8_t ident, const std::string &authenticatorResponse)
+{
+    std::string v(1, (char)ident);
+    v += authenticatorResponse;
+    return v.size() <= 253 && ezutil::addVendor(m_Pck, D_VENDOR_MICROSOFT, MS_CHAP2_SUCCESS, v.data(), (uint16_t)v.size());
+}
+
+bool EZResponse::AddMSCHAPError(uint8_t ident, int errorCode, bool retryAllowed, const char *message)
+{
+    std::string v = EZMSCHAP::MakeErrorValue(ident, errorCode, retryAllowed, message);
+    return v.size() <= 253 && ezutil::addVendor(m_Pck, D_VENDOR_MICROSOFT, MS_CHAP_ERROR, v.data(), (uint16_t)v.size());
+}
+
+bool EZResponse::AddMPPEKeys(const uint8_t sendKey[16], const uint8_t recvKey[16], uint32_t policy, uint32_t types)
+{
+    if(!sendKey || !recvKey)
+        return false;
+    memcpy(m_mppeSend, sendKey, 16);
+    memcpy(m_mppeRecv, recvKey, 16);
+    m_mppePolicy = policy;
+    m_mppeTypes = types;
+    m_hasMppe = true;
+    return true;
+}
+
+bool EZResponse::AddMSCHAPv2Result(const EZMSCHAPv2Result &r, uint32_t mppePolicy, uint32_t mppeTypes)
+{
+    return AddMSCHAP2Success(r.ident, r.authenticatorResponse) && AddMPPEKeys(r.mppeSendKey, r.mppeRecvKey, mppePolicy, mppeTypes);
+}
+
+static bool addVendorNumber(RadiusPacket &pck, unsigned char type, uint32_t value)
+{
+    unsigned char be[4] = { (unsigned char)(value >> 24), (unsigned char)(value >> 16), (unsigned char)(value >> 8), (unsigned char)value };
+    return ezutil::addVendor(pck, D_VENDOR_MICROSOFT, type, be, 4);
+}
+#endif
+
 bool EZResponse::Send(RADIUSPacketTypeCodes code, EZRadiusClientIdentify *ClientIdentify)
 {
     if(!ClientIdentify || !ClientIdentify->Socket() || !ClientIdentify->RAS())
@@ -46,6 +84,25 @@ bool EZResponse::Send(RADIUSPacketTypeCodes code, EZRadiusClientIdentify *Client
     m_Pck.setSecret(&ras->Secret);
     // the authenticator field holds the Request Authenticator until the response authenticator is calculated
     m_Pck.setAuthenticator(ClientIdentify->Authenticator());
+
+#ifdef EZRADIUS_HAS_CRYPTO
+    if(m_hasMppe){
+        const unsigned char *secret = nullptr;
+        uint16_t secretLen = 0;
+        if(ras->Secret.getSecret(secret, secretLen) != RC_SUCCESS)
+            return false;
+        const std::string s = EZMSCHAP::EncodeMppeKey(m_mppeSend, secret, secretLen, ClientIdentify->Authenticator());
+        const std::string r = EZMSCHAP::EncodeMppeKey(m_mppeRecv, secret, secretLen, ClientIdentify->Authenticator());
+        if(!ezutil::addVendor(m_Pck, D_VENDOR_MICROSOFT, MS_MPPE_SEND_KEY, s.data(), (uint16_t)s.size())
+           || !ezutil::addVendor(m_Pck, D_VENDOR_MICROSOFT, MS_MPPE_RECV_KEY, r.data(), (uint16_t)r.size()))
+            return false;
+        if(m_mppePolicy && !addVendorNumber(m_Pck, MS_MPPE_ENCRYPTION_POLICY, m_mppePolicy))
+            return false;
+        if(m_mppeTypes && !addVendorNumber(m_Pck, MS_MPPE_ENCRYPTION_TYPES, m_mppeTypes))
+            return false;
+        m_hasMppe = false;      // a second Send() must not add the keys twice
+    }
+#endif
 
     // Proxy-State attributes of the request must be copied unmodified and in order (RFC 2865 section 5.33)
     for(const std::string &ps : ClientIdentify->ProxyStates()){
