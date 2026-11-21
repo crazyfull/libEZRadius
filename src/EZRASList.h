@@ -1,3 +1,13 @@
+/*
+ * libEZRadius
+ *
+ * Copyright (c) 2023-2026 Mojtaba Kahvand.
+ * All rights reserved.
+ *
+ * Licensed under the GNU Lesser General Public License v2.1.
+ * See LICENSE for details.
+ */
+
 #ifndef EZRASLIST_H
 #define EZRASLIST_H
 #include "RadiusSecret.h"

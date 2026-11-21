@@ -1,3 +1,13 @@
+/*
+ * libEZRadius
+ *
+ * Copyright (c) 2023-2026 Mojtaba Kahvand.
+ * All rights reserved.
+ *
+ * Licensed under the GNU Lesser General Public License v2.1.
+ * See LICENSE for details.
+ */
+
 #ifndef EZTRANSPORT_H
 #define EZTRANSPORT_H
 // RADIUS transports: UDP (RFC 2865), TCP (RFC 6613), TLS = RadSec (RFC 6614), DTLS (RFC 7360).

@@ -1,3 +1,13 @@
+/*
+ * libEZRadius
+ *
+ * Copyright (c) 2023-2026 Mojtaba Kahvand.
+ * All rights reserved.
+ *
+ * Licensed under the GNU Lesser General Public License v2.1.
+ * See LICENSE for details.
+ */
+
 #ifndef EZTLS_H
 #define EZTLS_H
 // TLS / DTLS engine for RadSec (RFC 6614) and RADIUS/DTLS (RFC 7360), on BoringSSL with memory BIOs

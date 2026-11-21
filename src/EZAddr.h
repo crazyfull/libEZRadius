@@ -1,3 +1,13 @@
+/*
+ * libEZRadius
+ *
+ * Copyright (c) 2023-2026 Mojtaba Kahvand.
+ * All rights reserved.
+ *
+ * Licensed under the GNU Lesser General Public License v2.1.
+ * See LICENSE for details.
+ */
+
 #ifndef EZADDR_H
 #define EZADDR_H
 // Internal address helpers (IPv4 / IPv6, IPv4 is handled as an IPv4-mapped IPv6 address)

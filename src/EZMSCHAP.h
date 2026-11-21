@@ -1,3 +1,13 @@
+/*
+ * libEZRadius
+ *
+ * Copyright (c) 2023-2026 Mojtaba Kahvand.
+ * All rights reserved.
+ *
+ * Licensed under the GNU Lesser General Public License v2.1.
+ * See LICENSE for details.
+ */
+
 #ifndef EZMSCHAP_H
 #define EZMSCHAP_H
 // Microsoft CHAP support: MS-CHAPv1 (RFC 2433), MS-CHAPv2 (RFC 2759), RADIUS attributes (RFC 2548),

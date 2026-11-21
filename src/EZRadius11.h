@@ -1,3 +1,13 @@
+/*
+ * libEZRadius
+ *
+ * Copyright (c) 2023-2026 Mojtaba Kahvand.
+ * All rights reserved.
+ *
+ * Licensed under the GNU Lesser General Public License v2.1.
+ * See LICENSE for details.
+ */
+
 #ifndef EZRADIUS11_H
 #define EZRADIUS11_H
 // RADIUS/1.1 (RFC 9765): the wire format used on TLS 1.3 connections that negotiated ALPN "radius/1.1".

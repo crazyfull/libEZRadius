@@ -1,3 +1,13 @@
+/*
+ * libEZRadius
+ *
+ * Copyright (c) 2023-2026 Mojtaba Kahvand.
+ * All rights reserved.
+ *
+ * Licensed under the GNU Lesser General Public License v2.1.
+ * See LICENSE for details.
+ */
+
 #ifndef EZDEDUP_H
 #define EZDEDUP_H
 // Internal: cache of recently received requests, to detect retransmissions (RFC 5080 section 2.2.2).

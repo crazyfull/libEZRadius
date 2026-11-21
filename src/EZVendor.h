@@ -1,3 +1,13 @@
+/*
+ * libEZRadius
+ *
+ * Copyright (c) 2023-2026 Mojtaba Kahvand.
+ * All rights reserved.
+ *
+ * Licensed under the GNU Lesser General Public License v2.1.
+ * See LICENSE for details.
+ */
+
 #ifndef EZVENDOR_H
 #define EZVENDOR_H
 // Internal: Vendor-Specific attribute (RFC 2865 section 5.26) helpers.
