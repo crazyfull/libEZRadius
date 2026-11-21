@@ -35,11 +35,18 @@ public:
     bool AddAttribute(RADIUSAttribute AttType, int value) { return m_client->AddAttribute(AttType, value); }
     bool AddVendorAttribute(uint32_t vendorId, unsigned char vendorType, const void *data, uint16_t length) { return m_client->AddVendorAttribute(vendorId, vendorType, data, length); }
     bool AddVendorAttribute(uint32_t vendorId, unsigned char vendorType, const char *text) { return m_client->AddVendorAttribute(vendorId, vendorType, text); }
+    bool AddVendorAttribute(const char *name, const char *text) { return m_client->AddVendorAttribute(name, text); }
+    bool AddVendorAttribute(const char *name, uint32_t number) { return m_client->AddVendorAttribute(name, number); }
+    bool AddRawAttribute(RADIUSAttribute AttType, const void *data, size_t length) { return m_client->AddRawAttribute(AttType, data, length); }
 #ifdef EZRADIUS_HAS_CRYPTO
     bool AddMSCHAPv2(const char *userName, const char *password) { return m_client->AddMSCHAPv2(userName, password); }
     bool AddMSCHAPv1(const char *userName, const char *password) { return m_client->AddMSCHAPv1(userName, password); }
     bool MSCHAPv2ServerVerified() { return m_client->MSCHAPv2ServerVerified(); }
     bool GetMPPEKeys(uint8_t sendKey[16], uint8_t recvKey[16]) { return m_client->GetMPPEKeys(sendKey, recvKey); }
+    bool AddEAPMessage(const std::string &eapPacket) { return m_client->AddEAPMessage(eapPacket); }
+    std::string GetEAPMessage() { return m_client->GetEAPMessage(); }
+    std::string GetState() { return m_client->GetState(); }
+    bool GetMPPEKeys(std::string &sendKey, std::string &recvKey) { return m_client->GetMPPEKeys(sendKey, recvKey); }
 #endif
 
     // Send the request and wait for the result (blocks at most about TimeOut * RetryCount milliseconds,

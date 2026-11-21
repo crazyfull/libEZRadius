@@ -61,6 +61,22 @@ The asynchronous API is designed to be driven by an existing reactor. `EZRadiusS
 - Automatic Status-Server answers.
 - `EZResponse` builds responses with attributes, vendor-specific attributes, MS-CHAPv2 success/error, MPPE keys, Response Authenticator, Message-Authenticator, and Proxy-State copying.
 
+### Vendor-specific attributes (modular dictionary)
+
+- `EZVendorRegistry` (`EZVendorDict.h`): a data-driven registry of vendors and vendor attributes. Adding a vendor needs no change to the core.
+- Built-in dictionaries (`src/vendors/`): MikroTik (14988), Cisco (9), Juniper (2636), Huawei (2011), and Microsoft (311).
+- Add your own vendor at run time from FreeRADIUS-style dictionary text or a file (`VENDOR`, `BEGIN-VENDOR` / `END-VENDOR`, `ATTRIBUTE`, `VALUE`, `format=t,l`), or from code with `registerVendor()` / `registerAttribute()`.
+- Attributes are addressed by name and converted by type (string, integer, IPv4/IPv6 address, octets, symbolic `VALUE` names); decoded back with `decode()` / `find()`.
+- Vendor sub-attribute headers with 1, 2 or 4 byte type and 0, 1 or 2 byte length are supported.
+
+### EAP (RFC 3748 / RFC 3579)
+
+- `EZEAPServer`: EAP over RADIUS state machine (State sessions, EAP-Message fragmentation, Message-Authenticator, Access-Challenge / Accept / Reject, MPPE keys from the MSK).
+- Methods: **EAP-MD5** and **EAP-TLS** (RFC 5216, TLS 1.2, mutual certificate authentication, MSK export). EAP-Nak method negotiation.
+- Pluggable `EZEAPMethod` interface for additional methods; accept / reject hooks for adding reply attributes (for example vendor attributes).
+- `EZEAPPeer`: a small supplicant (MD5 + TLS) for tools and tests; `EZRadiusClient` / `EZRadiusSyncClient` carry the EAP exchange (`AddEAPMessage()`, `GetEAPMessage()`, `GetState()`).
+- Needs BoringSSL (`libcrypto`; EAP-TLS also `libssl`).
+
 ### Dynamic Authorization (RFC 5176)
 
 - `EZCoA`: listener for Disconnect-Request and CoA-Request from a RADIUS server; replies with ACK or NAK.
@@ -84,7 +100,9 @@ The asynchronous API is designed to be driven by an existing reactor. `EZRadiusS
 | [RFC 2867](https://www.rfc-editor.org/rfc/rfc2867) | RADIUS Accounting Modifications for Tunnel Protocol Support | Acct-Tunnel-Connection as a string attribute |
 | [RFC 2868](https://www.rfc-editor.org/rfc/rfc2868) | RADIUS Attributes for Tunnel Protocol Support | Supported Tunnel attributes as typed attributes; Tunnel-Password is not decrypted |
 | [RFC 2869](https://www.rfc-editor.org/rfc/rfc2869) | RADIUS Extensions | Acct-Input/Output-Gigawords, Event-Timestamp, Acct-Interim-Interval, ARAP and other listed attributes |
-| [RFC 3579](https://www.rfc-editor.org/rfc/rfc3579) | RADIUS Support for EAP | Message-Authenticator generation and verification; EAP-Message is carried as an opaque attribute only |
+| [RFC 3579](https://www.rfc-editor.org/rfc/rfc3579) | RADIUS Support for EAP | Message-Authenticator, EAP-Message fragmentation and reassembly, State handling, MPPE keys from the MSK |
+| [RFC 3748](https://www.rfc-editor.org/rfc/rfc3748) | Extensible Authentication Protocol (EAP) | Packet format, Identity, Nak, Notification, EAP-MD5 |
+| [RFC 5216](https://www.rfc-editor.org/rfc/rfc5216) | The EAP-TLS Authentication Protocol | EAP-TLS over TLS 1.2: fragmentation, Start / ACK, mutual certificates, MSK / EMSK export |
 | [RFC 5176](https://www.rfc-editor.org/rfc/rfc5176) | Dynamic Authorization Extensions to RADIUS | Disconnect-Request / ACK / NAK and CoA-Request / ACK / NAK; listener and sender; UDP port 3799 |
 | [RFC 5997](https://www.rfc-editor.org/rfc/rfc5997) | Use of Status-Server Packets in RADIUS | Automatic server answer and client health check |
 | [RFC 5080](https://www.rfc-editor.org/rfc/rfc5080) | Common RADIUS Implementation Issues and Suggested Fixes | Duplicate request detection, response validation, retransmission behavior, source-port randomization |
@@ -96,7 +114,7 @@ The asynchronous API is designed to be driven by an existing reactor. `EZRadiusS
 
 The test suite includes vectors from RFC 2202 (HMAC-MD5), RFC 2865 §7.1 (PAP), RFC 2759 §9.2 (MS-CHAPv2), and RFC 3079 §3.5.3 (MPPE master key).
 
-**Transport scope:** libEZRadius currently implements RADIUS over UDP only. It does not implement RADIUS over TCP, RadSec (TLS), or DTLS. Carrying the EAP-Message attribute does not mean that EAP methods or EAP-TLS are implemented.
+**Transport scope:** libEZRadius currently implements RADIUS over UDP only. It does not implement RADIUS over TCP, RadSec (TLS), or DTLS. EAP is supported through EAP-MD5 and EAP-TLS (see [EAP](#eap-server-and-peer)); PEAP, EAP-TTLS and EAP-TLS 1.3 (RFC 9190) are not implemented.
 
 ---
 
@@ -148,7 +166,7 @@ cmake --build build
 | `EZRADIUS_NETRECTOR_DIR` | — | netRector source directory |
 | `EZRADIUS_FETCH_NETRECTOR` | `OFF` | Fetch netRector with FetchContent when it is not found |
 | `BORINGSSL_DIR` | — | BoringSSL prefix containing `include/` and `lib/libcrypto.a`; can also be supplied through the environment |
-| `EZRADIUS_ENABLE_CRYPTO` | `ON` | Use BoringSSL when found. Without it, PAP, CHAP, Accounting, CoA, and Status-Server remain available; MS-CHAP is compiled out (`EZRADIUS_HAS_CRYPTO` is not defined) |
+| `EZRADIUS_ENABLE_CRYPTO` | `ON` | Use BoringSSL when found. Without it, PAP, CHAP, Accounting, CoA, and Status-Server remain available; MS-CHAP and EAP are compiled out (`EZRADIUS_HAS_CRYPTO` is not defined). EAP-TLS additionally needs `libssl` next to `libcrypto` (`EZRADIUS_HAS_TLS`) |
 | `EZRADIUS_BUILD_EXAMPLES` | `ON` | Build examples |
 | `EZRADIUS_BUILD_TESTS` | `ON` | Build tests |
 | `EZRADIUS_BUILD_FUZZER` | `OFF` | Build the libFuzzer target (requires Clang) |
@@ -343,12 +361,88 @@ The library server can answer Status-Server requests automatically.
 ### Vendor-specific attributes
 
 ```cpp
-response.AddVendorAttribute(14988, 8, "10M/10M"); // Text payload.
-response.AddVendorAttribute(vendorId, type, data, length); // Binary payload.
+// By number (no dictionary needed):
+response.AddVendorAttribute(14988, 8, "10M/10M");            // text payload
+response.AddVendorAttribute(vendorId, type, data, length);   // binary payload
 
-// Read the Vendor-Specific attribute container:
-AttrValue value = request.getAttribute(VENDOR_SPECIFIC);
+// By dictionary name (MikroTik, Cisco, Juniper, Huawei and Microsoft are built in):
+response.AddVendorAttribute("Mikrotik-Rate-Limit", "10M/10M");
+response.AddVendorAttribute("Mikrotik-Total-Limit", 1000000u);
+response.AddVendorAttribute("Cisco-AVPair", "shell:priv-lvl=15");
+client.AddVendorAttribute("Mikrotik-Group", "gold");          // clients too
+
+// Read: decode every Vendor-Specific attribute of a packet
+for(const EZVSAValue &v : EZVendorRegistry::instance().decode(request))
+    printf("%s (%s) = %s\n", v.name.c_str(), v.vendorName.c_str(), v.text.c_str());
+EZVSAValue v;
+if(EZVendorRegistry::instance().find(request, "Mikrotik-Group", v)) { /* v.text, v.number */ }
 ```
+
+#### Adding a vendor without touching the core
+
+Load a dictionary at start-up (FreeRADIUS dictionary syntax):
+
+```cpp
+std::string err;
+EZVendorRegistry::instance().loadDictionary(R"(
+VENDOR Acme 99999 format=2,2        # 2 byte type, 2 byte length (default is 1,1)
+BEGIN-VENDOR Acme
+ATTRIBUTE Acme-Level  300 byte
+ATTRIBUTE Acme-Mode   301 integer
+ATTRIBUTE Acme-Addr6  302 ipv6addr
+ATTRIBUTE Acme-Blob   303 octets
+ATTRIBUTE Acme-Name   304 string
+VALUE Acme-Mode Fast 7
+END-VENDOR Acme
+)", &err);
+// or: EZVendorRegistry::instance().loadDictionaryFile("/etc/ezradius/acme.dict", &err);
+
+response.AddVendorAttribute("Acme-Mode", "Fast");
+```
+
+To ship a vendor with the library, add `src/vendors/<vendor>.cpp` with the dictionary text; the CMake glob picks it up. Attribute numbers in the built-in dictionaries follow the vendors' public documentation; verify them against your device's firmware before relying on them.
+
+### EAP (server and peer)
+
+```cpp
+#include "EZEAP.h"
+
+EZEAPServer eap;
+
+// EAP-TLS: server certificate + the CA that signed the client certificates
+EZEAPTLSConfig tls;
+tls.certChainPem  = EZEAPTLSConfig::readFile("server.pem");
+tls.privateKeyPem = EZEAPTLSConfig::readFile("server.key");
+tls.caPem         = EZEAPTLSConfig::readFile("ca.pem");
+std::string err;
+if(!eap.enableTLS(tls, &err)) { /* err */ }
+
+// EAP-MD5 (optional, no keys, no mutual authentication)
+eap.enableMD5([](const std::string &user, std::string &password) { return lookup(user, password); });
+
+// extra reply attributes on success
+eap.setAcceptHook([](EZResponse &r, const EZEAPSessionInfo &info) {
+    r.AddVendorAttribute("Mikrotik-Rate-Limit", "10M/10M");     // info.identity, info.peerName (certificate CN)
+});
+
+// in the request callback of EZRadiusServer:
+if(type == ACCESS_REQUEST && eap.Process(request, from) != EZEAPResult::NOT_EAP)
+    return;                                  // the response was sent
+// ... otherwise handle PAP / CHAP / MS-CHAP as usual
+```
+
+On success the Access-Accept carries `MS-MPPE-Recv-Key` (MSK bytes 0..31) and `MS-MPPE-Send-Key` (MSK bytes 32..63). Methods registered first are offered first; a peer can choose another registered method with EAP-Nak. Own methods: implement `EZEAPMethod` and call `registerMethod()`.
+
+Client side (a NAS or a test tool) with the built-in supplicant:
+
+```cpp
+EZEAPPeer peer("bob");
+peer.setTLS(clientTlsConfig);                // or peer.setPassword("...") for EAP-MD5
+// loop: Send(C_ACCESS_REQUEST) with AddEAPMessage(response) and the State of the last challenge;
+//       response = peer.handle(client.GetEAPMessage());   until Access-Accept / Reject
+```
+
+See `tests/test_eap.cpp` for the complete conversation loop.
 
 More complete programs are available in [`example/`](example/), including server, asynchronous client, blocking client, and CoA examples.
 
@@ -479,6 +573,8 @@ With BoringSSL enabled, the library supports the MS-CHAP and MPPE attributes use
 - **MD5 is part of the RADIUS protocol.** RADIUS over UDP provides authentication/integrity mechanisms based on a shared secret but does not provide strong confidentiality. Use long random shared secrets and keep RADIUS traffic on trusted networks or protected tunnels.
 - **RadSec is not implemented.** If transport confidentiality is required, protect traffic externally (for example with IPsec) until a TLS-based RADIUS transport is available.
 - **Passwords:** password logging is disabled by default; `RadiusAttribute::setDumpPasswords(true)` is a debugging switch and should be used carefully.
+- **EAP-MD5 is weak.** It has no mutual authentication and exports no keys; prefer EAP-TLS and keep EAP-MD5 for trusted links.
+- **EAP-TLS** verifies the client certificate against the configured CA (`verifyPeer`); certificate revocation (CRL / OCSP) is not checked.
 - **MS-CHAPv1 and MS-CHAPv2 are cryptographically weak.** They rely on legacy DES-based constructions. Enable them only when required by the access protocol.
 - **Duplicate detection** stores recent authenticated requests in memory. The default window and cache capacity are implementation settings.
 - Unknown senders and invalid packets are dropped without a response.
@@ -487,7 +583,7 @@ With BoringSSL enabled, the library supports the MS-CHAP and MPPE attributes use
 
 ## Testing
 
-The repository includes tests for packet parsing, malformed packets, PAP and authenticator vectors, Message-Authenticator, VSA, loopback client/server behavior, Accounting, CoA, Status-Server, IPv6, timeout/cancel behavior, MS-CHAPv1/v2, and MPPE key derivation. A libFuzzer target is available for packet-parser fuzzing.
+The repository includes tests for packet parsing, malformed packets, PAP and authenticator vectors, Message-Authenticator, VSA, loopback client/server behavior, Accounting, CoA, Status-Server, IPv6, timeout/cancel behavior, MS-CHAPv1/v2, MPPE key derivation, the vendor dictionary (built-in and run-time vendors), and EAP-MD5 / EAP-TLS conversations (with fragmentation, Nak, rejected certificates). A libFuzzer target is available for packet-parser fuzzing.
 
 ```sh
 cmake -S . -B build -DEZRADIUS_SANITIZE=ON
@@ -502,9 +598,9 @@ To build the libFuzzer target, enable `EZRADIUS_BUILD_FUZZER` and use Clang.
 ## Limitations
 
 - Linux only (epoll through netRector).
-- EAP methods and EAP-TLS are not implemented. EAP-Message (attribute 79) is carried as an opaque attribute only.
+- EAP: only EAP-MD5 and EAP-TLS (TLS 1.2). PEAP, EAP-TTLS, EAP-TLS with TLS 1.3, session resumption and CRL / OCSP checks are not implemented.
 - RADIUS over TCP, RadSec (TLS), and RADIUS over DTLS are not implemented; the current transport is UDP.
-- There is no runtime-loadable attribute dictionary or general runtime typed-attribute registration API.
+- The dictionary covers vendor-specific attributes only; standard attributes (RFC 2865 etc.) use the compiled-in table. Dictionary `tlv` / `struct` / extended types are not supported.
 - Extended attributes (RFC 6929), Tunnel-Password decryption, and the IPv6 attribute set (RFC 3162 / RFC 4818) beyond NAS-IPv6-Address are not decoded.
 - MS-CHAPv1 supports the NT response only; the LM response is not supported. MPPE keys are derived for MS-CHAPv2.
 - One request per client object; there is no connection/request pool.

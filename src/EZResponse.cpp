@@ -23,6 +23,23 @@ bool EZResponse::AddVendorAttribute(uint32_t vendorId, unsigned char vendorType,
     return ezutil::addVendor(m_Pck, vendorId, vendorType, data, length);
 }
 
+bool EZResponse::AddVendorAttribute(const char *name, const char *text)
+{
+    return ezutil::addVendorByName(m_Pck, name, text);
+}
+
+bool EZResponse::AddVendorAttribute(const char *name, uint32_t number)
+{
+    return ezutil::addVendorByName(m_Pck, name, number);
+}
+
+bool EZResponse::AddRawAttribute(RADIUSAttribute AttType, const void *data, size_t length)
+{
+    if(AttType == D_ATTR_USER_PASSWORD || AttType == D_ATTR_CHAP_PASSWORD || AttType == D_ATTR_MESSAGE_AUTHENTICATOR)
+        return false;
+    return ezutil::addOctets(m_Pck, (unsigned char)AttType, data, length);
+}
+
 bool EZResponse::AddVendorAttribute(uint32_t vendorId, unsigned char vendorType, const char *text)
 {
     if(!text)
@@ -51,8 +68,20 @@ bool EZResponse::AddMPPEKeys(const uint8_t sendKey[16], const uint8_t recvKey[16
 {
     if(!sendKey || !recvKey)
         return false;
-    memcpy(m_mppeSend, sendKey, 16);
-    memcpy(m_mppeRecv, recvKey, 16);
+    m_mppeSend.assign((const char*)sendKey, 16);
+    m_mppeRecv.assign((const char*)recvKey, 16);
+    m_mppePolicy = policy;
+    m_mppeTypes = types;
+    m_hasMppe = true;
+    return true;
+}
+
+bool EZResponse::AddMPPEKeys(const std::string &sendKey, const std::string &recvKey, uint32_t policy, uint32_t types)
+{
+    if(sendKey.empty() || recvKey.empty() || sendKey.size() > 238 || recvKey.size() > 238)
+        return false;
+    m_mppeSend = sendKey;
+    m_mppeRecv = recvKey;
     m_mppePolicy = policy;
     m_mppeTypes = types;
     m_hasMppe = true;
@@ -91,8 +120,10 @@ bool EZResponse::Send(RADIUSPacketTypeCodes code, EZRadiusClientIdentify *Client
         uint16_t secretLen = 0;
         if(ras->Secret.getSecret(secret, secretLen) != RC_SUCCESS)
             return false;
-        const std::string s = EZMSCHAP::EncodeMppeKey(m_mppeSend, secret, secretLen, ClientIdentify->Authenticator());
-        const std::string r = EZMSCHAP::EncodeMppeKey(m_mppeRecv, secret, secretLen, ClientIdentify->Authenticator());
+        const std::string s = EZMSCHAP::EncodeMppeKey((const uint8_t*)m_mppeSend.data(), m_mppeSend.size(), secret, secretLen, ClientIdentify->Authenticator());
+        const std::string r = EZMSCHAP::EncodeMppeKey((const uint8_t*)m_mppeRecv.data(), m_mppeRecv.size(), secret, secretLen, ClientIdentify->Authenticator());
+        if(s.empty() || r.empty())
+            return false;
         if(!ezutil::addVendor(m_Pck, D_VENDOR_MICROSOFT, MS_MPPE_SEND_KEY, s.data(), (uint16_t)s.size())
            || !ezutil::addVendor(m_Pck, D_VENDOR_MICROSOFT, MS_MPPE_RECV_KEY, r.data(), (uint16_t)r.size()))
             return false;
@@ -113,7 +144,7 @@ bool EZResponse::Send(RADIUSPacketTypeCodes code, EZRadiusClientIdentify *Client
     }
 
     const bool accessResponse = (code == ACCESS_ACCEPT || code == ACCESS_REJECT || code == ACCESS_CHALLENGE);
-    if(accessResponse && ClientIdentify->RequestHadMessageAuthenticator()){
+    if(accessResponse && (m_forceMA || ClientIdentify->RequestHadMessageAuthenticator())){
         if(!m_Pck.addMessageAuthenticator() || !m_Pck.signMessageAuthenticator())
             return false;
     }

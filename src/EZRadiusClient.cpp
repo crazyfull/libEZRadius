@@ -4,6 +4,9 @@
 #include "md5.h"
 #include "EZCrypto.h"
 #include "EZVendor.h"
+#ifdef EZRADIUS_HAS_CRYPTO
+#include "EZEAP.h"
+#endif
 #include "clsUDPSocket.h"
 #include "clsEpollReactor.h"
 #include "clsLog.h"
@@ -146,6 +149,23 @@ bool EZRadiusClient::AddVendorAttribute(uint32_t vendorId, unsigned char vendorT
     return ezutil::addVendor(m_RequestPck, vendorId, vendorType, data, length);
 }
 
+bool EZRadiusClient::AddVendorAttribute(const char *name, const char *text)
+{
+    return m_state == State::Idle && ezutil::addVendorByName(m_RequestPck, name, text);
+}
+
+bool EZRadiusClient::AddVendorAttribute(const char *name, uint32_t number)
+{
+    return m_state == State::Idle && ezutil::addVendorByName(m_RequestPck, name, number);
+}
+
+bool EZRadiusClient::AddRawAttribute(RADIUSAttribute AttType, const void *data, size_t length)
+{
+    if(m_state != State::Idle || AttType == D_ATTR_MESSAGE_AUTHENTICATOR || AttType == D_ATTR_USER_PASSWORD || AttType == D_ATTR_CHAP_PASSWORD)
+        return false;
+    return ezutil::addOctets(m_RequestPck, (unsigned char)AttType, data, length);
+}
+
 bool EZRadiusClient::AddVendorAttribute(uint32_t vendorId, unsigned char vendorType, const char *text)
 {
     if(!text)
@@ -234,6 +254,39 @@ bool EZRadiusClient::MSCHAPv2ServerVerified()
 
     const std::string expected = EZMSCHAP::AuthenticatorResponseV2(m_msNtHash, m_msNtResponse, m_msPeerChallenge, m_msAuthChallenge, m_msUser);
     return expected.size() == 42 && EZCrypto::Equal(expected.data(), v.data() + 1, 42);
+}
+
+bool EZRadiusClient::AddEAPMessage(const std::string &eapPacket)
+{
+    return m_state == State::Idle && ezeap::addMessage(m_RequestPck, eapPacket);
+}
+
+std::string EZRadiusClient::GetEAPMessage()
+{
+    return m_result == EZResult::OK ? ezeap::extractMessage(m_Response) : std::string();
+}
+
+std::string EZRadiusClient::GetState()
+{
+    if(m_result != EZResult::OK)
+        return std::string();
+    std::vector<AttrValue> v = m_Response.getAttributes((RADIUSAttribute)ezeap::ATTR_STATE);
+    return v.empty() ? std::string() : v[0].strValue;
+}
+
+bool EZRadiusClient::GetMPPEKeys(std::string &sendKey, std::string &recvKey)
+{
+    if(m_result != EZResult::OK)
+        return false;
+    const unsigned char *secret = nullptr;
+    uint16_t secretLen = 0;
+    if(m_Secret.getSecret(secret, secretLen) != RC_SUCCESS)
+        return false;
+    std::string s, r;
+    if(!ezvendor::find(m_Response, D_VENDOR_MICROSOFT, MS_MPPE_SEND_KEY, s) || !ezvendor::find(m_Response, D_VENDOR_MICROSOFT, MS_MPPE_RECV_KEY, r))
+        return false;
+    return EZMSCHAP::DecodeMppeKey(s, secret, secretLen, m_RequestPck.getAuthenticator(), sendKey)
+        && EZMSCHAP::DecodeMppeKey(r, secret, secretLen, m_RequestPck.getAuthenticator(), recvKey);
 }
 
 bool EZRadiusClient::GetMPPEKeys(uint8_t sendKey[16], uint8_t recvKey[16])
