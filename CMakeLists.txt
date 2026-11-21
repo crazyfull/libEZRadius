@@ -15,6 +15,7 @@ endif()
 option(BUILD_SHARED_LIBS "Build shared library" OFF)
 option(EZRADIUS_BUILD_EXAMPLES "Build the example programs" ON)
 option(EZRADIUS_BUILD_TESTS "Build the tests" ON)
+option(EZRADIUS_BUILD_FUZZER "Build the libFuzzer target (clang only)" OFF)
 option(EZRADIUS_SANITIZE "Build with AddressSanitizer + UndefinedBehaviorSanitizer" OFF)
 
 # netRector (https://github.com/crazyfull/netRector):
@@ -62,6 +63,10 @@ endif()
 if(EZRADIUS_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
+endif()
+
+if(EZRADIUS_BUILD_FUZZER)
+    add_subdirectory(fuzz)
 endif()
 
 include(GNUInstallDirs)

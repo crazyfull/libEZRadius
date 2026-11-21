@@ -1,5 +1,8 @@
 #include "EZRadiusServer.h"
 #include "EZRadiusClientIdentify.h"
+#include "EZResponse.h"
+#include "EZAddr.h"
+#include "EZDedup.h"
 #include "clsUDPSocket.h"
 #include "clsEpollReactor.h"
 #include "clsLog.h"
@@ -24,7 +27,8 @@ public:
 };
 
 EZRadiusServer::EZRadiusServer(netrector::EpollReactor *reactor)
-    : m_pReactor(reactor), m_AuthPort(D_RADIUS_AUTHENTICATION_PORT), m_AccPort(D_RADIUS_ACCOUNTING_PORT), m_BindAddress("0.0.0.0")
+    
+    : m_pReactor(reactor), m_Dedup(std::make_shared<EZDedupCache>()), m_AuthPort(D_RADIUS_AUTHENTICATION_PORT), m_AccPort(D_RADIUS_ACCOUNTING_PORT), m_BindAddress("0.0.0.0")
 {
 }
 
@@ -44,6 +48,8 @@ void EZRadiusServer::onReceiveRequest(RADIUSPacketTypeCodes, RadiusPacket &, EZR
 
 void EZRadiusServer::setAuthenticationPort(uint16_t p) { m_AuthPort = p; }
 void EZRadiusServer::setAccountingPort(uint16_t p) { m_AccPort = p; }
+void EZRadiusServer::setDuplicateWindow(int ms) { m_Dedup->setWindow(ms); }
+
 void EZRadiusServer::setBindAddress(const char *ip) { m_BindAddress = (ip && *ip) ? ip : "0.0.0.0"; }
 
 void EZRadiusServer::SeRequestCallback(const RADIUSCallback &callback, void *p)
@@ -109,11 +115,10 @@ void EZRadiusServer::Stop()
 
 void EZRadiusServer::handleDatagram(netrector::UDPSocket *socket, const uint8_t *data, size_t len, const struct sockaddr *from, socklen_t fromLen)
 {
-    if(!from || from->sa_family != AF_INET || fromLen < sizeof(struct sockaddr_in))
+    if(!from || fromLen < sizeof(struct sockaddr_in) || (from->sa_family != AF_INET && from->sa_family != AF_INET6))
         return;
 
-    const in_addr_t peerIP = ((const struct sockaddr_in*)from)->sin_addr.s_addr;
-    std::shared_ptr<RASItem> ras = m_RASList.GetRASByIP(peerIP);
+    std::shared_ptr<RASItem> ras = m_RASList.GetRAS(from);
 
     // unknown RAS: drop silently (no answer, so the server can not be used to probe)
     if(!ras){
@@ -139,20 +144,49 @@ void EZRadiusServer::handleDatagram(netrector::UDPSocket *socket, const uint8_t 
         }
     }
 
-    // Message-Authenticator (RFC 3579, BlastRADIUS)
+    // Message-Authenticator (RFC 3579, BlastRADIUS); mandatory in Status-Server (RFC 5997)
     if(hasMA){
         if(!request.verifyMessageAuthenticator()){
             NR_LOG(netrector::LOG_WARN, "EZRadiusServer: bad Message-Authenticator, packet dropped");
             return;
         }
-    }else if(m_RequireMA && code == ACCESS_REQUEST){
-        NR_LOG(netrector::LOG_WARN, "EZRadiusServer: Access-Request without Message-Authenticator dropped");
+    }else if((m_RequireMA && code == ACCESS_REQUEST) || code == STATUS_SERVER){
+        NR_LOG(netrector::LOG_WARN, "EZRadiusServer: request without Message-Authenticator dropped");
         return;
+    }
+
+    // retransmission: same source (address + port), ID and Request Authenticator
+    std::string dedupKey = ezaddr::keyOf(from);
+    const uint16_t peerPort = ezaddr::portOf(from);
+    dedupKey.append((const char*)&peerPort, sizeof(peerPort));
+    dedupKey.push_back((char)request.getID());
+    dedupKey.append((const char*)request.getAuthenticator(), D_AUTHENTICATOR_LENGTH);
+
+    const std::string *cached = nullptr;
+    switch(m_Dedup->check(dedupKey, &cached)){
+    case EZDedupCache::REPLAY:
+        socket->sendTo((const uint8_t*)cached->data(), cached->size(), from, fromLen);
+        return;
+    case EZDedupCache::IN_PROGRESS:
+        return;
+    default:
+        break;
     }
 
     RADIUSPacketTypeCodes type = (code > D_PACKET_MAX_KNOWN_CODE) ? UNKNOWN : (RADIUSPacketTypeCodes)code;
 
     EZRadiusClientIdentify identify(request.getID(), from, fromLen, socket, request.getAuthenticator(), ras, hasMA);
+    identify.setDedup(m_Dedup, dedupKey);
+    for(const AttrValue &ps : request.getAttributes(PROXY_STATE))
+        identify.addProxyState(ps.strValue);
+
+    // Status-Server (RFC 5997): answered here, the application is not bothered
+    if(type == STATUS_SERVER && m_AutoStatusServer){
+        const bool acctPort = (m_AccPort != m_AuthPort && socket->getLocalPort() == m_AccPort);
+        EZResponse response;
+        response.Send(acctPort ? ACCOUNTING_RESPONSE : ACCESS_ACCEPT, &identify);
+        return;
+    }
 
     if(m_callback)
         m_callback(type, request, identify, this, m_pPointerCallback);

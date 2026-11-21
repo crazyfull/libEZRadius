@@ -15,35 +15,35 @@
 
 // Radius packet code values (from RFC2865)
 // https://www.iana.org/assignments/radius-types/radius-types.xhtml
-#define D_PACKET_ACCESS_REQUEST         1
-#define D_PACKET_ACCESS_ACCEPT          2
-#define D_PACKET_ACCESS_REJECT          3
-#define D_PACKET_ACCOUNTING_REQUEST     4
-#define D_PACKET_ACCOUNTING_RESPONSE    5
-#define D_PACKET_ACCOUNTING_STATUS      6
+constexpr int D_PACKET_ACCESS_REQUEST = 1;
+constexpr int D_PACKET_ACCESS_ACCEPT = 2;
+constexpr int D_PACKET_ACCESS_REJECT = 3;
+constexpr int D_PACKET_ACCOUNTING_REQUEST = 4;
+constexpr int D_PACKET_ACCOUNTING_RESPONSE = 5;
+constexpr int D_PACKET_ACCOUNTING_STATUS = 6;
 /*
     "Password-Request",         // 7
     "Password-Ack",             // 8
     "Password-Reject",          // 9
     "Accounting-Message",       // 10
 */
-#define D_PACKET_ACCOUNTING_MESSAGE     10
-#define D_PACKET_ACCESS_CHALLENGE       11
-#define D_PACKET_STATUS_SERVER          12
-#define D_PACKET_STATUS_CLIENT          13
+constexpr int D_PACKET_ACCOUNTING_MESSAGE = 10;
+constexpr int D_PACKET_ACCESS_CHALLENGE = 11;
+constexpr int D_PACKET_STATUS_SERVER = 12;
+constexpr int D_PACKET_STATUS_CLIENT = 13;
 
-#define D_PACKET_MAX_KNOWN_CODE         45
+constexpr int D_PACKET_MAX_KNOWN_CODE = 45;
 
 
 
 // Some global constants (following RFC definitions)
-#define D_RADIUS_PACKET_HEADER_LENGTH 20
-#define D_RADIUS_PACKET_MAX_LENGTH    4096
-#define D_AUTHENTICATOR_LENGTH        16
+constexpr int D_RADIUS_PACKET_HEADER_LENGTH = 20;
+constexpr int D_RADIUS_PACKET_MAX_LENGTH = 4096;
+constexpr int D_AUTHENTICATOR_LENGTH = 16;
 
 // Raw data buffer is used for storing the whole RADIUS packet _AND_ secret key
 // (hence it should be D_RADIUS_PACKET_MAX_LENGTH + D_SECRET_MAX_LENGTH)
-#define D_RAW_DATA_LENGTH           4352
+constexpr int D_RAW_DATA_LENGTH = 4352;
 
 enum AttrValueTypes{
     ATTR_TYPE_INTEGER = 1,

@@ -12,7 +12,7 @@
 
 // definition of Attribute Types from RFC2865
 // https://www.iana.org/assignments/radius-types/radius-types.xhtml
-#define D_MAX_PASSWORD_LENGTH 256
+constexpr int D_MAX_PASSWORD_LENGTH = 256;
 
 enum RADIUSAttribute {
     USER_NAME = 1,
@@ -147,7 +147,10 @@ enum RADIUSPacketTypeCodes
 enum RADIUSClientRequestType
 {
     C_ACCESS_REQUEST = 1,
-    C_ACCOUNTING_REQUEST = 4
+    C_ACCOUNTING_REQUEST = 4,
+    C_STATUS_SERVER = 12,           // RFC 5997: health check of a server (Message-Authenticator is always added)
+    C_DISCONNECT_REQUEST = 40,      // RFC 5176: sent to the NAS (CoAPort) to disconnect a session
+    C_COA_REQUEST = 43              // RFC 5176: sent to the NAS (CoAPort) to change a session
 };
 
 // Values for RADIUS Attribute, Acct-Status-Type
@@ -160,118 +163,117 @@ enum class RADIUSAcctStatusType {
     OFF = 8,
 };
 
-#define D_ATTR_USER_NAME                1
-#define D_ATTR_USER_PASSWORD            2
-#define D_ATTR_CHAP_PASSWORD            3
-#define D_ATTR_NAS_IP_ADDRESS           4
-#define D_ATTR_NAS_PORT                 5
-#define D_ATTR_SERVICE_TYPE             6
-#define D_ATTR_FRAMED_PROTOCOL          7
-#define D_ATTR_FRAMED_IP_ADDRESS        8
-#define D_ATTR_FRAMED_IP_NETMASK        9
-#define D_ATTR_FRAMED_ROUTING           10 
-#define D_ATTR_FILTER_ID                11 
-#define D_ATTR_FRAMED_MTU               12 
-#define D_ATTR_FRAMED_COMPRESSION       13 
-#define D_ATTR_LOGIN_IP_HOST            14 
-#define D_ATTR_LOGIN_SERVICE            15 
-#define D_ATTR_LOGIN_TCP_PORT           16 
-#define D_ATTR_OLD_PASSWORD             17
-#define D_ATTR_REPLY_MESSAGE            18 
-#define D_ATTR_CALLBACK_NUMBER          19 
-#define D_ATTR_CALLBACK_ID              20 
-#define D_ATTR_FRAMED_ROUTE             22 
-#define D_ATTR_FRAMED_IPX_NETWORK       23 
-#define D_ATTR_STATE                    24 
-#define D_ATTR_CLASS                    25 
-#define D_ATTR_VENDOR_SPECIFIC          26 
-#define D_ATTR_SESSION_TIMEOUT          27 
-#define D_ATTR_IDLE_TIMEOUT             28 
-#define D_ATTR_TERMINATION_ACTION       29 
-#define D_ATTR_CALLED_STATION_ID        30 
-#define D_ATTR_CALLING_STATION_ID       31 
-#define D_ATTR_NAS_IDENTIFIER           32 
-#define D_ATTR_PROXY_STATE              33 
-#define D_ATTR_LOGIN_LAT_SERVICE        34 
-#define D_ATTR_LOGIN_LAT_NODE           35 
-#define D_ATTR_LOGIN_LAT_GROUP          36 
-#define D_ATTR_FRAMED_APPLETALK_LINK    37 
-#define D_ATTR_FRAMED_APPLETALK_NETWORK 38 
-#define D_ATTR_FRAMED_APPLETALK_ZONE    39
-#define D_ATTR_ACCT_STATUS_TYPE         40
-#define D_ATTR_ACCT_DELAY_TIME          41
-#define D_ATTR_ACCT_INPUT_OCTETS        42
-#define D_ATTR_ACCT_OUTPUT_OCTETS       43
-#define D_ATTR_ACCT_SESSION_ID          44
-#define D_ATTR_ACCT_AUTHENTIC           45
-#define D_ATTR_ACCT_SESSION_TIME        46
-#define D_ATTR_ACCT_INPUT_PACKETS       47
-#define D_ATTR_ACCT_OUTPUT_PACKETS      48
-#define D_ATTR_ACCT_TERMINATE_CAUSE     49
-#define D_ATTR_ACCT_MULTI_SESSION_ID    50
-#define D_ATTR_ACCT_LINK_COUNT          51
-#define D_ATTR_ACCT_INPUT_GIGAWORDS     52
-#define D_ATTR_ACCT_OUTPUT_GIGAWORDS    53
-#define D_ATTR_UNASSIGNED               54
-#define D_ATTR_EVENT_TIMESTAMP          55
-#define D_ATTR_EGRESS_VLANID            56
-#define D_ATTR_INGRESS_FILTERS          57
-#define D_ATTR_EGRESS_VLAN_NAME         58
-#define D_ATTR_USER_PRIORITY_TABLE      59
-#define D_ATTR_CHAP_CHALLENGE           60
-#define D_ATTR_CHAP_CHALLENGE           60 
-#define D_ATTR_NAS_PORT_TYPE            61 
-#define D_ATTR_PORT_LIMIT               62 
-#define D_ATTR_LOGIN_LAT_PROMPT         63
-#define D_ATTR_TUNNEL_TYPE              64
-#define D_ATTR_TUNNEL_MEDIUM_TYPE       65
-#define D_ATTR_TUNNEL_CLIENT_ENDPOINT   66
-#define D_ATTR_TUNNEL_SERVER_ENDPOINT   67
-#define D_ATTR_ACCT_TUNNEL_CONNECTION   68
-#define D_ATTR_TUNNEL_PASSWORD          69
-#define D_ATTR_ARAP_PASSWORD            70
-#define D_ATTR_ARAP_FEATURES            71
-#define D_ATTR_ARAP_ZONE_ACCESS         72
-#define D_ATTR_ARAP_SECURITY            73
-#define D_ATTR_ARAP_SECURITY_DATA       74
-#define D_ATTR_PASSWORD_RETRY           75
-#define D_ATTR_PROMPT                   76
-#define D_ATTR_CONNECT_INFO             77
-#define D_ATTR_CONFIGURRATION_TOKEN     78
-#define D_ATTR_EAP_MESSAGE              79
-#define D_ATTR_MESSAGE_AUTHENTICATOR    80
-#define D_ATTR_TUNNEL_PRIVATE_GOUP_ID   81
-#define D_ATTR_TUNNEL_ASSIGMENT_ID      82
-#define D_ATTR_TUNNEL_PREFERENCE        83
-#define D_ATTR_ARAP_CHALLENGE_RESPONSE  84
-#define D_ATTR_ACCT_INTERIM_INTRAVEL    85
-#define D_ATTR_ACCT_INTERIM_INTERVAL    85
+constexpr int D_ATTR_USER_NAME = 1;
+constexpr int D_ATTR_USER_PASSWORD = 2;
+constexpr int D_ATTR_CHAP_PASSWORD = 3;
+constexpr int D_ATTR_NAS_IP_ADDRESS = 4;
+constexpr int D_ATTR_NAS_PORT = 5;
+constexpr int D_ATTR_SERVICE_TYPE = 6;
+constexpr int D_ATTR_FRAMED_PROTOCOL = 7;
+constexpr int D_ATTR_FRAMED_IP_ADDRESS = 8;
+constexpr int D_ATTR_FRAMED_IP_NETMASK = 9;
+constexpr int D_ATTR_FRAMED_ROUTING = 10;
+constexpr int D_ATTR_FILTER_ID = 11;
+constexpr int D_ATTR_FRAMED_MTU = 12;
+constexpr int D_ATTR_FRAMED_COMPRESSION = 13;
+constexpr int D_ATTR_LOGIN_IP_HOST = 14;
+constexpr int D_ATTR_LOGIN_SERVICE = 15;
+constexpr int D_ATTR_LOGIN_TCP_PORT = 16;
+constexpr int D_ATTR_OLD_PASSWORD = 17;
+constexpr int D_ATTR_REPLY_MESSAGE = 18;
+constexpr int D_ATTR_CALLBACK_NUMBER = 19;
+constexpr int D_ATTR_CALLBACK_ID = 20;
+constexpr int D_ATTR_FRAMED_ROUTE = 22;
+constexpr int D_ATTR_FRAMED_IPX_NETWORK = 23;
+constexpr int D_ATTR_STATE = 24;
+constexpr int D_ATTR_CLASS = 25;
+constexpr int D_ATTR_VENDOR_SPECIFIC = 26;
+constexpr int D_ATTR_SESSION_TIMEOUT = 27;
+constexpr int D_ATTR_IDLE_TIMEOUT = 28;
+constexpr int D_ATTR_TERMINATION_ACTION = 29;
+constexpr int D_ATTR_CALLED_STATION_ID = 30;
+constexpr int D_ATTR_CALLING_STATION_ID = 31;
+constexpr int D_ATTR_NAS_IDENTIFIER = 32;
+constexpr int D_ATTR_PROXY_STATE = 33;
+constexpr int D_ATTR_LOGIN_LAT_SERVICE = 34;
+constexpr int D_ATTR_LOGIN_LAT_NODE = 35;
+constexpr int D_ATTR_LOGIN_LAT_GROUP = 36;
+constexpr int D_ATTR_FRAMED_APPLETALK_LINK = 37;
+constexpr int D_ATTR_FRAMED_APPLETALK_NETWORK = 38;
+constexpr int D_ATTR_FRAMED_APPLETALK_ZONE = 39;
+constexpr int D_ATTR_ACCT_STATUS_TYPE = 40;
+constexpr int D_ATTR_ACCT_DELAY_TIME = 41;
+constexpr int D_ATTR_ACCT_INPUT_OCTETS = 42;
+constexpr int D_ATTR_ACCT_OUTPUT_OCTETS = 43;
+constexpr int D_ATTR_ACCT_SESSION_ID = 44;
+constexpr int D_ATTR_ACCT_AUTHENTIC = 45;
+constexpr int D_ATTR_ACCT_SESSION_TIME = 46;
+constexpr int D_ATTR_ACCT_INPUT_PACKETS = 47;
+constexpr int D_ATTR_ACCT_OUTPUT_PACKETS = 48;
+constexpr int D_ATTR_ACCT_TERMINATE_CAUSE = 49;
+constexpr int D_ATTR_ACCT_MULTI_SESSION_ID = 50;
+constexpr int D_ATTR_ACCT_LINK_COUNT = 51;
+constexpr int D_ATTR_ACCT_INPUT_GIGAWORDS = 52;
+constexpr int D_ATTR_ACCT_OUTPUT_GIGAWORDS = 53;
+constexpr int D_ATTR_UNASSIGNED = 54;
+constexpr int D_ATTR_EVENT_TIMESTAMP = 55;
+constexpr int D_ATTR_EGRESS_VLANID = 56;
+constexpr int D_ATTR_INGRESS_FILTERS = 57;
+constexpr int D_ATTR_EGRESS_VLAN_NAME = 58;
+constexpr int D_ATTR_USER_PRIORITY_TABLE = 59;
+constexpr int D_ATTR_CHAP_CHALLENGE = 60;
+constexpr int D_ATTR_NAS_PORT_TYPE = 61;
+constexpr int D_ATTR_PORT_LIMIT = 62;
+constexpr int D_ATTR_LOGIN_LAT_PROMPT = 63;
+constexpr int D_ATTR_TUNNEL_TYPE = 64;
+constexpr int D_ATTR_TUNNEL_MEDIUM_TYPE = 65;
+constexpr int D_ATTR_TUNNEL_CLIENT_ENDPOINT = 66;
+constexpr int D_ATTR_TUNNEL_SERVER_ENDPOINT = 67;
+constexpr int D_ATTR_ACCT_TUNNEL_CONNECTION = 68;
+constexpr int D_ATTR_TUNNEL_PASSWORD = 69;
+constexpr int D_ATTR_ARAP_PASSWORD = 70;
+constexpr int D_ATTR_ARAP_FEATURES = 71;
+constexpr int D_ATTR_ARAP_ZONE_ACCESS = 72;
+constexpr int D_ATTR_ARAP_SECURITY = 73;
+constexpr int D_ATTR_ARAP_SECURITY_DATA = 74;
+constexpr int D_ATTR_PASSWORD_RETRY = 75;
+constexpr int D_ATTR_PROMPT = 76;
+constexpr int D_ATTR_CONNECT_INFO = 77;
+constexpr int D_ATTR_CONFIGURRATION_TOKEN = 78;
+constexpr int D_ATTR_EAP_MESSAGE = 79;
+constexpr int D_ATTR_MESSAGE_AUTHENTICATOR = 80;
+constexpr int D_ATTR_TUNNEL_PRIVATE_GOUP_ID = 81;
+constexpr int D_ATTR_TUNNEL_ASSIGMENT_ID = 82;
+constexpr int D_ATTR_TUNNEL_PREFERENCE = 83;
+constexpr int D_ATTR_ARAP_CHALLENGE_RESPONSE = 84;
+constexpr int D_ATTR_ACCT_INTERIM_INTRAVEL = 85;
+constexpr int D_ATTR_ACCT_INTERIM_INTERVAL = 85;
 
 
-#define D_ATTR_MAX_KNOWN_TYPE           85
+constexpr int D_ATTR_MAX_KNOWN_TYPE = 85;
 
 
 // definition of Acct-Status-Type attribute values from RFC2866
 // https://www.iana.org/assignments/radius-types/radius-types.xhtml#radius-types-10
-#define D_ACCT_STATUS_START             1
-#define D_ACCT_STATUS_STOP              2
-#define D_ACCT_STATUS_INTERIM_UPDATE    3
+constexpr int D_ACCT_STATUS_START = 1;
+constexpr int D_ACCT_STATUS_STOP = 2;
+constexpr int D_ACCT_STATUS_INTERIM_UPDATE = 3;
 /*4 ,5 ,6 Reserved*/
-#define D_ACCT_STATUS_ON                7
-#define D_ACCT_STATUS_OFF               8
+constexpr int D_ACCT_STATUS_ON = 7;
+constexpr int D_ACCT_STATUS_OFF = 8;
 
 
 
 
 
 // max length of User-Password attribute
-#define D_USER_PASSWORD_MAX_LENGTH    128
+constexpr int D_USER_PASSWORD_MAX_LENGTH = 128;
 #define CHAP_VALUE_LENGTH             16
 
 // max length of the value of a single attribute (RFC 2865: attribute length is 1 byte, 2 bytes are header)
-#define D_ATTR_MAX_VALUE_LENGTH       253
+constexpr int D_ATTR_MAX_VALUE_LENGTH = 253;
 // Message-Authenticator (RFC 3579) value length (HMAC-MD5)
-#define D_MESSAGE_AUTHENTICATOR_LENGTH 16
+constexpr int D_MESSAGE_AUTHENTICATOR_LENGTH = 16;
 
 
 class RadiusPacket;

@@ -6,6 +6,7 @@
 #include "EZClientSettings.h"
 #include <functional>
 #include <string>
+#include <sys/socket.h>
 
 namespace netrector { class EpollReactor; class UDPSocket; }
 
@@ -25,6 +26,9 @@ enum class EZResult {
 //   c.AddAttribute(USER_PASSWORD, "pass");
 //   c.Send(C_ACCESS_REQUEST, [](EZRadiusClient &c, EZResult r){ if(r == EZResult::OK) ... c.GetResponseType() ... });
 //
+// - request types: C_ACCESS_REQUEST, C_ACCOUNTING_REQUEST, C_STATUS_SERVER (RFC 5997 health check),
+//   C_DISCONNECT_REQUEST and C_COA_REQUEST (RFC 5176, sent to the NAS on CoAPort; Host = the NAS)
+// - Host may be an IPv4 / IPv6 address or a name (A, then AAAA, resolved asynchronously)
 // - one request per object (call Reset() to build another one)
 // - must be used from the reactor thread; the object must not be destroyed from inside its own callback
 //   until the callback returned (destroying it elsewhere cancels the request, the callback is not called)
@@ -85,12 +89,15 @@ private:
     bool m_dnsPending = false;
     int m_attempt = 0;
     int m_maxAttempts = 1;
-    uint32_t m_serverIP = 0;        // network byte order
+    struct sockaddr_storage m_server;       // IPv4 or IPv6
+    socklen_t m_serverLen = 0;
     uint16_t m_serverPort = 0;
+    bool m_triedAAAA = false;
     RADIUSClientRequestType m_type = C_ACCESS_REQUEST;
 
     static void onResolved(const char *hostname, char **ips, size_t count, int qtype, void *user_data);
-    void startWithAddress(uint32_t ip);
+    void startWithAddress(const struct sockaddr *address, socklen_t len);
+    bool resolve(int qtype);
     void transmit();
     void onTimeout();
     void onDatagram(const uint8_t *data, size_t len, const struct sockaddr *from);
