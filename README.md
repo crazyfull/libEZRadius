@@ -29,7 +29,7 @@ libEZRadius is intended for Linux applications that need RADIUS client and serve
 
 - **Native event-loop integration:** asynchronous RADIUS operations use the application's `netrector::EpollReactor`.
 - **No internal worker threads:** the asynchronous core does not create threads or use mutex-based synchronization. Callbacks execute on the reactor thread, so application callbacks must not perform long blocking work.
-- **Asynchronous network operations:** UDP I/O, reactor timers, and DNS resolution are integrated with netRector.
+- **Asynchronous network operations:** UDP/TCP I/O, reactor timers, and DNS resolution are integrated with netRector. TLS and DTLS run on BoringSSL memory BIOs over the same non-blocking sockets.
 - **Client and server roles:** the library includes an asynchronous client, a blocking client wrapper, an Authentication/Accounting server, and RFC 5176 Dynamic Authorization listener and sender functionality.
 - **Built-in authentication helpers:** PAP, CHAP, MS-CHAPv1/v2, MS-CHAPv2 mutual authentication, and MPPE key handling are provided.
 - **Low-level packet access:** applications can construct and inspect RADIUS attributes and vendor-specific data directly.
@@ -54,12 +54,27 @@ The asynchronous API is designed to be driven by an existing reactor. `EZRadiusS
 
 ### Server
 
-- `EZRadiusServer`: UDP listeners on Authentication and Accounting ports (IPv4, IPv6, or dual stack).
+- `EZRadiusServer`: UDP listeners on Authentication and Accounting ports (IPv4, IPv6, or dual stack); optional RADIUS over TCP, RadSec (TLS) and RADIUS over DTLS (see [Transports](#transports)).
 - Per-NAS shared secrets (`EZRASList`) and IPv4/IPv6 NAS addresses; unknown senders are dropped silently.
 - Request validation before the application callback: packet structure, Request Authenticator where applicable, and Message-Authenticator according to packet type and configuration.
 - Duplicate request detection: a duplicate is not processed twice; the cached response is sent again.
 - Automatic Status-Server answers.
 - `EZResponse` builds responses with attributes, vendor-specific attributes, MS-CHAPv2 success/error, MPPE keys, Response Authenticator, Message-Authenticator, and Proxy-State copying.
+
+### Transports
+
+| Transport | Standard | Enable | Shared secret | Default port |
+|---|---|---|---|---|
+| UDP | RFC 2865 / 2866 / 5176 | always on | per NAS (`EZRASList`) | 1812 / 1813 / 3799 |
+| TCP | RFC 6613 | `server.EnableTCP()`, `Transport = TCP` | per NAS | same numbers as UDP, over TCP |
+| TLS (RadSec) | RFC 6614 | `server.EnableTLS(cfg)`, `Transport = TLS` | fixed `radsec` | 2083/tcp |
+| DTLS | RFC 7360 | `server.EnableDTLS(cfg)`, `Transport = DTLS` | fixed `radius/dtls` | 2083/udp |
+| RADIUS/1.1 over TLS 1.3 | RFC 9765 | negotiated with ALPN (`EZTLSConfig::radiusVersions`) | not used | 2083/tcp |
+
+- **TCP (RFC 6613):** stream framing with the Length field (packets below 20 or above 4096 bytes close the connection), invalid packets close the connection, connection limit and idle timeout on the server, one reusable connection per async client object. RADIUS over TCP has no retransmission on a connection: `RetryCount` means "reconnect and send again". TCP has no encryption: use it on trusted links only.
+- **RadSec (RFC 6614) and DTLS (RFC 7360):** implemented on BoringSSL (`EZTLS.h`). Both sides authenticate with X.509 certificates (mutual authentication): chain validation against `caPem`, server name check against the certificate subjectAltName (DNS or IP, the Common Name is never used), optional SHA-256 fingerprint pinning (also usable instead of a CA for self-signed certificates). TLS 1.2 and 1.3, DTLS 1.2, no compression, no 0-RTT, no session tickets or resumption (every connection is authorized in full). The server only accepts addresses from `RASList()` unless `setRadSecIPFilter(false)`.
+- **DTLS server:** one DTLS session per peer address and port, one RADIUS packet per record, retransmission timers, partial-handshake and session limits, idle timeout. Packets up to 4096 bytes are supported.
+- **RADIUS/1.1 (RFC 9765):** on TLS 1.3 the ALPN protocols `radius/1.0` and `radius/1.1` are negotiated (default offer: both). RADIUS/1.1 replaces the Identifier and the authenticators with a 4-byte Token and sends User-Password and MPPE keys as plain strings inside the tunnel; there is no Message-Authenticator. The library converts at the transport boundary, so request handling, `EZResponse`, MS-CHAP and EAP work unchanged. Servers set `radiusVersions` to `"1.0"` to disable it. A client that offers only `"1.1"` fails against servers that do not support it.
 
 ### Vendor-specific attributes (modular dictionary)
 
@@ -114,7 +129,14 @@ The asynchronous API is designed to be driven by an existing reactor. `EZRadiusS
 
 The test suite includes vectors from RFC 2202 (HMAC-MD5), RFC 2865 §7.1 (PAP), RFC 2759 §9.2 (MS-CHAPv2), and RFC 3079 §3.5.3 (MPPE master key).
 
-**Transport scope:** libEZRadius currently implements RADIUS over UDP only. It does not implement RADIUS over TCP, RadSec (TLS), or DTLS. EAP is supported through EAP-MD5 and EAP-TLS (see [EAP](#eap-server-and-peer)); PEAP, EAP-TTLS and EAP-TLS 1.3 (RFC 9190) are not implemented.
+| [RFC 6613](https://www.rfc-editor.org/rfc/rfc6613) | RADIUS over TCP | Stream framing, connection handling, server listeners, client transport |
+| [RFC 6614](https://www.rfc-editor.org/rfc/rfc6614) | TLS Encryption for RADIUS (RadSec) | Mutual certificate authentication, fixed secret `radsec`, port 2083 |
+| [RFC 7360](https://www.rfc-editor.org/rfc/rfc7360) | Datagram Transport Layer Security (DTLS) as a Transport Layer for RADIUS | DTLS 1.2 sessions, one packet per record, port 2083/udp |
+| [RFC 9765](https://www.rfc-editor.org/rfc/rfc9765) | RADIUS/1.1: Leveraging Connection-Oriented Transports | ALPN `radius/1.0` / `radius/1.1`, Token header, no authenticators, plain obfuscated attributes |
+
+Where the Internet-Draft `draft-ietf-radext-radiusdtls-bis` (which updates RFC 6614 and RFC 7360) is clear, the implementation follows it: no CN matching, no resumption, TLS 1.2 minimum, connection and partial-session limits, 0.5 s reconnect delay.
+
+**Transport scope:** UDP, TCP, TLS and DTLS (see [Transports](#transports)). EAP is supported through EAP-MD5 and EAP-TLS (see [EAP](#eap-server-and-peer)); PEAP, EAP-TTLS and EAP-TLS 1.3 (RFC 9190) are not implemented.
 
 ---
 
@@ -166,7 +188,7 @@ cmake --build build
 | `EZRADIUS_NETRECTOR_DIR` | — | netRector source directory |
 | `EZRADIUS_FETCH_NETRECTOR` | `OFF` | Fetch netRector with FetchContent when it is not found |
 | `BORINGSSL_DIR` | — | BoringSSL prefix containing `include/` and `lib/libcrypto.a`; can also be supplied through the environment |
-| `EZRADIUS_ENABLE_CRYPTO` | `ON` | Use BoringSSL when found. Without it, PAP, CHAP, Accounting, CoA, and Status-Server remain available; MS-CHAP and EAP are compiled out (`EZRADIUS_HAS_CRYPTO` is not defined). EAP-TLS additionally needs `libssl` next to `libcrypto` (`EZRADIUS_HAS_TLS`) |
+| `EZRADIUS_ENABLE_CRYPTO` | `ON` | Use BoringSSL when found. Without it, PAP, CHAP, Accounting, CoA, Status-Server, and RADIUS over TCP remain available; MS-CHAP and EAP are compiled out (`EZRADIUS_HAS_CRYPTO` is not defined). EAP-TLS, RadSec, DTLS and RADIUS/1.1 additionally need `libssl` next to `libcrypto` (`EZRADIUS_HAS_TLS`) |
 | `EZRADIUS_BUILD_EXAMPLES` | `ON` | Build examples |
 | `EZRADIUS_BUILD_TESTS` | `ON` | Build tests |
 | `EZRADIUS_BUILD_FUZZER` | `OFF` | Build the libFuzzer target (requires Clang) |
@@ -357,6 +379,40 @@ client.Send(C_STATUS_SERVER, ...);
 ```
 
 The library server can answer Status-Server requests automatically.
+
+### TCP, RadSec (TLS) and DTLS
+
+```cpp
+#include "EZTLS.h"
+
+// Server: UDP + TCP + RadSec + DTLS on one reactor
+EZRadiusServer server(&reactor);
+server.EnableTCP();                                        // TCP on the Authentication / Accounting ports
+
+EZTLSConfig tls;
+tls.certChainPem  = EZTLSConfig::readFile("server.pem");
+tls.privateKeyPem = EZTLSConfig::readFile("server.key");
+tls.caPem         = EZTLSConfig::readFile("clients-ca.pem");   // clients must present a certificate from this CA
+std::string err;
+if(!server.EnableTLS(tls, 2083, &err)) { /* err */ }       // RadSec
+if(!server.EnableDTLS(tls, 2083, &err)) { /* err */ }      // RADIUS over DTLS (UDP 2083)
+server.RASList()->AddRAS("unused", "192.0.2.10");          // allowed NAS address (the secret is fixed over TLS / DTLS)
+server.Start();
+
+// Client
+EZClientSettings s;
+s.Host = "radius.example.net";
+s.Transport = EZTransport::TLS;                            // or TCP / DTLS
+s.TLS.certChainPem  = EZTLSConfig::readFile("nas.pem");
+s.TLS.privateKeyPem = EZTLSConfig::readFile("nas.key");
+s.TLS.caPem         = EZTLSConfig::readFile("server-ca.pem");
+s.TLS.serverName    = "radius.example.net";                // must be in the server certificate subjectAltName
+EZRadiusSyncClient client(s);                              // or EZRadiusClient on your reactor
+```
+
+Instead of a CA you can pin certificates: `tls.verifyPeer = false; tls.pinnedSHA256 = {"<sha256 hex of the peer certificate>"};`. In the request callback `from.isRadius11()` tells whether the connection speaks RADIUS/1.1; `client.UsedRadius11()` reports it on the client.
+
+An async `EZRadiusClient` keeps its TCP / TLS connection open for the following requests of the same object (`ReuseConnection`, default on). The blocking `EZRadiusSyncClient` runs a private reactor only while `Send()` waits, which closes the sockets afterwards, so it uses a new connection (and TLS handshake) for every `Send()`. DTLS always uses one session per request.
 
 ### Vendor-specific attributes
 
@@ -571,7 +627,8 @@ With BoringSSL enabled, the library supports the MS-CHAP and MPPE attributes use
 
 - **Use Message-Authenticator.** It is enabled by default for client Access-Requests. On servers, enable `setRequireMessageAuthenticator(true)` when the NAS devices are patched and support the requirement.
 - **MD5 is part of the RADIUS protocol.** RADIUS over UDP provides authentication/integrity mechanisms based on a shared secret but does not provide strong confidentiality. Use long random shared secrets and keep RADIUS traffic on trusted networks or protected tunnels.
-- **RadSec is not implemented.** If transport confidentiality is required, protect traffic externally (for example with IPsec) until a TLS-based RADIUS transport is available.
+- **Use RadSec or DTLS for confidentiality.** RADIUS over UDP and TCP does not encrypt the conversation. RadSec (TLS) and DTLS authenticate both peers with certificates; keep the CA small, set `serverName`, and prefer TLS 1.3 / RADIUS/1.1. Certificate revocation (CRL / OCSP) is not checked; pin fingerprints or rotate short-lived certificates instead.
+- **DTLS cookies:** BoringSSL's DTLS server has no HelloVerifyRequest cookie exchange. The server therefore only starts a handshake for addresses in `RASList()` (`setRadSecIPFilter(true)`, default) and limits partial sessions; do not expose a DTLS listener to the open Internet with `setRadSecIPFilter(false)`.
 - **Passwords:** password logging is disabled by default; `RadiusAttribute::setDumpPasswords(true)` is a debugging switch and should be used carefully.
 - **EAP-MD5 is weak.** It has no mutual authentication and exports no keys; prefer EAP-TLS and keep EAP-MD5 for trusted links.
 - **EAP-TLS** verifies the client certificate against the configured CA (`verifyPeer`); certificate revocation (CRL / OCSP) is not checked.
@@ -583,7 +640,7 @@ With BoringSSL enabled, the library supports the MS-CHAP and MPPE attributes use
 
 ## Testing
 
-The repository includes tests for packet parsing, malformed packets, PAP and authenticator vectors, Message-Authenticator, VSA, loopback client/server behavior, Accounting, CoA, Status-Server, IPv6, timeout/cancel behavior, MS-CHAPv1/v2, MPPE key derivation, the vendor dictionary (built-in and run-time vendors), and EAP-MD5 / EAP-TLS conversations (with fragmentation, Nak, rejected certificates). A libFuzzer target is available for packet-parser fuzzing.
+The repository includes tests for packet parsing, malformed packets, PAP and authenticator vectors, Message-Authenticator, VSA, loopback client/server behavior, Accounting, CoA, Status-Server, IPv6, timeout/cancel behavior, MS-CHAPv1/v2, MPPE key derivation, the vendor dictionary (built-in and run-time vendors), and EAP-MD5 / EAP-TLS conversations (with fragmentation, Nak, rejected certificates), RADIUS over TCP (framing, connection reuse, invalid lengths), RadSec (mutual TLS, name checks, pinning, untrusted CAs, IP filter), DTLS (handshake, 3 kB packets, refused peers), and RADIUS/1.1 (wire conversion, ALPN negotiation matrix, EAP over RADIUS/1.1, random-input robustness). A libFuzzer target is available for packet-parser fuzzing.
 
 ```sh
 cmake -S . -B build -DEZRADIUS_SANITIZE=ON
@@ -599,11 +656,11 @@ To build the libFuzzer target, enable `EZRADIUS_BUILD_FUZZER` and use Clang.
 
 - Linux only (epoll through netRector).
 - EAP: only EAP-MD5 and EAP-TLS (TLS 1.2). PEAP, EAP-TTLS, EAP-TLS with TLS 1.3, session resumption and CRL / OCSP checks are not implemented.
-- RADIUS over TCP, RadSec (TLS), and RADIUS over DTLS are not implemented; the current transport is UDP.
+- TCP / TLS / DTLS: no Status-Server watchdog and no multi-server failover on a connection, no TLS-PSK, no dynamic peer discovery (RFC 7585), no connection pool (one connection per client object), no DTLS session reuse between requests. DTLS is DTLS 1.2 only. RADIUS/1.1 does not convert Tunnel-Password and does not implement Protocol-Error / Original-Packet-Code handling.
 - The dictionary covers vendor-specific attributes only; standard attributes (RFC 2865 etc.) use the compiled-in table. Dictionary `tlv` / `struct` / extended types are not supported.
 - Extended attributes (RFC 6929), Tunnel-Password decryption, and the IPv6 attribute set (RFC 3162 / RFC 4818) beyond NAS-IPv6-Address are not decoded.
 - MS-CHAPv1 supports the NT response only; the LM response is not supported. MPPE keys are derived for MS-CHAPv2.
-- One request per client object; there is no connection/request pool.
+- One request at a time per client object.
 - Server duplicate detection and the NAS list are per-process and in memory.
 - The server runs on one reactor. To use multiple cores, run one reactor per thread; `SO_REUSEPORT` multi-reactor binding is not currently wired up.
 

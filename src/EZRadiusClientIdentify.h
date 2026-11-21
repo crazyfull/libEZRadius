@@ -3,6 +3,7 @@
 
 #include "RadiusPacket.h"
 #include "EZRASList.h"
+#include "EZTransport.h"
 #include <memory>
 #include <vector>
 #include <string>
@@ -27,6 +28,8 @@ class EZRadiusClientIdentify
     std::shared_ptr<EZDedupCache> m_Dedup;
     std::string m_DedupKey;
     std::vector<std::string> m_ProxyStates;
+    std::shared_ptr<EZReplyChannel> m_Channel;
+    bool m_Radius11 = false;
 
 public:
     EZRadiusClientIdentify(uint8_t ID, const struct sockaddr *peer, socklen_t peerLen,
@@ -48,6 +51,13 @@ public:
     void setDedup(std::shared_ptr<EZDedupCache> cache, const std::string &key) { m_Dedup = std::move(cache); m_DedupKey = key; }
     const std::shared_ptr<EZDedupCache> &dedup() const { return m_Dedup; }
     const std::string &dedupKey() const { return m_DedupKey; }
+
+    // TCP / TLS / DTLS: the channel the response is sent on (Socket() is null then)
+    const std::shared_ptr<EZReplyChannel> &channel() const { return m_Channel; }
+    void setChannel(std::shared_ptr<EZReplyChannel> channel) { m_Channel = std::move(channel); }
+    // the request came in RADIUS/1.1 format (RFC 9765): no Message-Authenticator exists on this connection
+    bool isRadius11() const { return m_Radius11; }
+    void setRadius11(bool on) { m_Radius11 = on; }
 
     // IPv4 address of the peer (network byte order), 0 when the peer is not IPv4
     // (an IPv4-mapped IPv6 peer counts as IPv4)
