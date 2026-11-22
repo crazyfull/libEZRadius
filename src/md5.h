@@ -47,6 +47,12 @@ extern void MD5Calc(unsigned char *output, const unsigned char *input, uint32_t 
 extern void HMAC_MD5(unsigned char output[16], const unsigned char *key, uint32_t keyLen,
                      const unsigned char *data, uint32_t dataLen);
 
+#ifdef EZRADIUS_HAS_CRYPTO
+/// BoringSSL (assembly) versions of MD5Calc / HMAC_MD5, used automatically when available (md5_boring.cpp)
+extern int EZ_MD5_Fast(unsigned char output[16], const unsigned char *input, uint32_t len);
+extern int EZ_HMAC_MD5_Fast(unsigned char output[16], const unsigned char *key, uint32_t keyLen, const unsigned char *data, uint32_t dataLen);
+#endif
+
 /// Constant time memory comparison. Returns 1 when equal.
 extern int ConstTimeEqual(const unsigned char *a, const unsigned char *b, uint32_t len);
 

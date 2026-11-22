@@ -40,6 +40,11 @@ EZRadiusClient::EZRadiusClient(netrector::EpollReactor *reactor, const EZClientS
     : m_pReactor(reactor), m_settings(Settings)
 {
     memset(&m_server, 0, sizeof(m_server));
+    if(m_settings.Pool){
+        m_pool = m_settings.Pool;
+        m_settings.Transport = m_pool->transport();
+        m_settings.Secret = m_pool->secret();
+    }
     // RFC 6614 / draft-ietf-radext-radiusdtls-bis: fixed shared secrets over TLS and DTLS
     if(m_settings.Transport == EZTransport::TLS)
         m_settings.Secret = "radsec";
@@ -58,6 +63,11 @@ EZRadiusClient::~EZRadiusClient()
 
 void EZRadiusClient::releaseResources(bool keepConnection)
 {
+    if(m_pooled){
+        m_pooled = false;
+        if(m_pool)
+            m_pool->cancel(this);       // no-op when the pool already finished the request
+    }
     if(m_timerId >= 0){
         if(m_pReactor)
             m_pReactor->removeTimer(m_timerId);
@@ -73,6 +83,13 @@ void EZRadiusClient::releaseResources(bool keepConnection)
             m_pReactor->cancelDNS(this);
         m_dnsPending = false;
     }
+#ifdef EZRADIUS_HAS_TLS
+    // DTLS: tell the server that the session is over (otherwise it keeps the session until its idle timeout)
+    if(m_tls && m_pSocket && m_tls->established()){
+        m_tls->close();
+        flushTls();
+    }
+#endif
     if(m_pSocket){
         static_cast<EZClientSocket*>(m_pSocket)->owner = nullptr;
         m_pSocket->close();         // autoDelete: deleted later by the reactor
@@ -374,6 +391,18 @@ bool EZRadiusClient::Send(RADIUSClientRequestType RequestType, const Callback &c
     m_attempt = 0;
     m_triedAAAA = false;
 
+    if(m_pool){
+        // the pool owns the sockets: it picks the Identifier, sends, retransmits and reconnects
+        m_pooled = true;
+        if(!m_pool->submit(this, port, m_maxAttempts)){
+            m_pooled = false;
+            m_state = State::Idle;
+            m_callback = nullptr;
+            return false;
+        }
+        return true;
+    }
+
 #ifdef EZRADIUS_HAS_TLS
     if((m_settings.Transport == EZTransport::TLS || m_settings.Transport == EZTransport::DTLS) && !m_tlsCtx){
         std::string err;
@@ -512,11 +541,55 @@ void EZRadiusClient::onDatagram(const uint8_t *data, size_t len, const struct so
 
 void EZRadiusClient::handleResponse(const uint8_t *data, size_t len)
 {
+    if(m_state == State::Running && acceptResponse(data, len))
+        finish(EZResult::OK);
+}
+
+bool EZRadiusClient::connPrepare(uint8_t id)
+{
+    m_RequestPck.setID(id);
+    // the signatures depend on the Identifier
+    switch(m_type){
+    case C_ACCOUNTING_REQUEST:
+    case C_DISCONNECT_REQUEST:
+    case C_COA_REQUEST:
+        return m_RequestPck.accountingRequestAuthenticator();
+    case C_STATUS_SERVER:
+        return m_RequestPck.signMessageAuthenticator();
+    default:
+        return !m_settings.UseMessageAuthenticator || m_RequestPck.signMessageAuthenticator();
+    }
+}
+
+const uint8_t *EZRadiusClient::connPacket(size_t &len)
+{
+    len = m_RequestPck.getLength();
+    return m_RequestPck.getRawData();
+}
+
+bool EZRadiusClient::connAccept(const uint8_t *packet, size_t len, bool radius11)
+{
     if(m_state != State::Running)
-        return;
+        return false;
+    m_radius11 = radius11;
+    if(!acceptResponse(packet, len))
+        return false;
+    m_negotiated11 = radius11;
+    return true;
+}
+
+void EZRadiusClient::connFinished(EZResult result)
+{
+    m_pooled = false;                   // the pool already forgot the request
+    finish(result);
+}
+
+// validates a response and stores it; the request is finished by the caller
+bool EZRadiusClient::acceptResponse(const uint8_t *data, size_t len)
+{
     RadiusPacket resp;
     if(!resp.setRawData((const char*)data, (int)len))
-        return;
+        return false;
 
     // right kind of response for this request
     const unsigned char code = resp.getCode();
@@ -530,23 +603,23 @@ void EZRadiusClient::handleResponse(const uint8_t *data, size_t len)
     case C_COA_REQUEST:         expected = (code == COA_ACK || code == COA_NAK); break;
     }
     if(!expected)
-        return;
+        return false;
 
     // ID + Response Authenticator (needs the Request Authenticator, so the request must be unchanged)
     if(!m_RequestPck.verifyResponse(resp))
-        return;
+        return false;
 
     resp.setSecret(&m_Secret);
     if(resp.hasMessageAuthenticator()){
         if(!resp.verifyMessageAuthenticator(m_RequestPck.getAuthenticator(), &m_Secret))
-            return;
+            return false;
     }else if(accessResp && m_settings.RequireMessageAuthenticator && !m_radius11){
-        return;
+        return false;
     }
 
     m_Response = resp;
     m_Response.setSecret(&m_Secret);
-    finish(EZResult::OK);
+    return true;
 }
 
 void EZRadiusClient::Cancel()

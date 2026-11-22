@@ -123,9 +123,11 @@ void RadiusPacket::init(unsigned char p_code)
 // ---------------------------
 // Clear packet content (the secret is kept)
 // ---------------------------
+// Performance: only the header and the room of the first attribute are cleared. The rest of m_data is not
+// specified (nothing reads beyond the packet length), so a packet object is cheap to create and to reuse.
 void RadiusPacket::resetBody(void)
 {
-    memset(m_data, 0, sizeof(m_data));
+    memset(m_data, 0, D_RADIUS_PACKET_HEADER_LENGTH + 260);
     memset(m_password, 0, sizeof(m_password));
     memset(m_oldPassword, 0, sizeof(m_oldPassword));
     m_passwordLength = 0;
@@ -135,6 +137,40 @@ void RadiusPacket::resetBody(void)
     setLength(D_RADIUS_PACKET_HEADER_LENGTH);
 }
 
+
+size_t RadiusPacket::usedBytes()
+{
+    uint16_t l_length;
+    memcpy(&l_length, m_data + 2, sizeof(uint16_t));
+    size_t n = (size_t)ntohs(l_length) + 260;       // an attribute under construction is at most 257 bytes
+    return n > sizeof(m_data) ? sizeof(m_data) : n;
+}
+
+void RadiusPacket::copyFrom(const RadiusPacket & p_packet)
+{
+    RadiusPacket &src = const_cast<RadiusPacket&>(p_packet);
+    memcpy(m_data, p_packet.m_data, src.usedBytes());
+    m_secret = p_packet.m_secret;
+    m_valid = p_packet.m_valid;
+    memcpy(m_password, p_packet.m_password, sizeof(m_password));
+    m_passwordLength = p_packet.m_passwordLength;
+    m_passwordOffset = p_packet.m_passwordOffset;
+    memcpy(m_oldPassword, p_packet.m_oldPassword, sizeof(m_oldPassword));
+    m_oldPasswordLength = p_packet.m_oldPasswordLength;
+    m_oldPasswordOffset = p_packet.m_oldPasswordOffset;
+}
+
+RadiusPacket::RadiusPacket(const RadiusPacket & p_packet)
+{
+    copyFrom(p_packet);
+}
+
+RadiusPacket & RadiusPacket::operator=(const RadiusPacket & p_packet)
+{
+    if(this != &p_packet)
+        copyFrom(p_packet);
+    return *this;
+}
 
 // ---------------------------
 // Destructor
@@ -728,7 +764,7 @@ bool RadiusPacket::responseAuthenticator(RadiusSecret * p_secret)
 
     unsigned char l_authenticator[D_AUTHENTICATOR_LENGTH];
     MD5Calc(l_authenticator, l_buf, l_length + l_secretLength);
-    explicit_bzero(l_buf, sizeof(l_buf));
+    explicit_bzero(l_buf, (size_t)l_length + l_secretLength);   // only the part that was written
 
     setAuthenticator(l_authenticator);
     return true;
@@ -785,7 +821,7 @@ bool RadiusPacket::accountingRequestAuthenticator(RadiusSecret * p_secret)
 
     unsigned char l_authenticator[D_AUTHENTICATOR_LENGTH];
     MD5Calc(l_authenticator, l_buf, l_length + l_secretLength);
-    explicit_bzero(l_buf, sizeof(l_buf));
+    explicit_bzero(l_buf, (size_t)l_length + l_secretLength);   // only the part that was written
 
     setAuthenticator(l_authenticator);
     return true;
@@ -812,7 +848,7 @@ bool RadiusPacket::verifyRequestAuthenticator(RadiusSecret * p_secret)
 
     unsigned char l_authenticator[D_AUTHENTICATOR_LENGTH];
     MD5Calc(l_authenticator, l_buf, l_length + l_secretLength);
-    explicit_bzero(l_buf, sizeof(l_buf));
+    explicit_bzero(l_buf, (size_t)l_length + l_secretLength);   // only the part that was written
 
     return ConstTimeEqual(l_authenticator, m_data + 4, D_AUTHENTICATOR_LENGTH) != 0;
 }
@@ -850,7 +886,7 @@ bool RadiusPacket::verifyResponse(RadiusPacket & p_packet)
 
     unsigned char l_authenticator[D_AUTHENTICATOR_LENGTH];
     MD5Calc(l_authenticator, l_buf, l_length + l_secretLength);
-    explicit_bzero(l_buf, sizeof(l_buf));
+    explicit_bzero(l_buf, (size_t)l_length + l_secretLength);   // only the part that was written
 
     // compare the result with the received authenticator
     return ConstTimeEqual(l_authenticator, p_packet.getAuthenticator(), D_AUTHENTICATOR_LENGTH) != 0;
