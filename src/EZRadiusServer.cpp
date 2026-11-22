@@ -301,6 +301,29 @@ public:
 
     EZStreamServerConn() { memset(&peer, 0, sizeof(peer)); link->conn = this; }
 
+    // Write batching: responses produced while one read is processed leave with a single write.
+    std::string wbuf;
+    int batch = 0;
+    bool out(const void *data, size_t len)
+    {
+        if(batch > 0){
+            wbuf.append((const char*)data, len);
+            return true;
+        }
+        return send(data, len);
+    }
+    struct Batch {
+        EZStreamServerConn *c;
+        explicit Batch(EZStreamServerConn *conn) : c(conn) { c->batch++; }
+        ~Batch()
+        {
+            if(--c->batch == 0 && !c->wbuf.empty()){
+                c->send(c->wbuf.data(), c->wbuf.size());
+                c->wbuf.clear();
+            }
+        }
+    };
+
     bool sendApp(const uint8_t *packet, size_t len, const EZRadiusClientIdentify *request)
     {
 #ifdef EZRADIUS_HAS_TLS
@@ -321,7 +344,7 @@ public:
         }
 #endif
         (void)request;
-        return send(packet, len);
+        return out(packet, len);
     }
 
 #ifdef EZRADIUS_HAS_TLS
@@ -329,7 +352,7 @@ public:
     bool flushTls()
     {
         for(const std::string &chunk : tls->takeOutput())
-            if(!send(chunk.data(), chunk.size()))
+            if(!out(chunk.data(), chunk.size()))
                 return false;
         return true;
     }
@@ -387,6 +410,7 @@ public:
     {
         if(!owner || !ras)
             return;
+        Batch batchGuard(this);
 #ifdef EZRADIUS_HAS_TLS
         if(tls){
             const bool ok = tls->feed(data, len);

@@ -15,6 +15,8 @@
 #include "RadiusSecret.h"
 #include "EZClientSettings.h"
 #include "EZMSCHAP.h"
+#include "EZResult.h"
+#include "EZRadiusPool.h"
 #include <functional>
 #include <memory>
 #include <string>
@@ -25,14 +27,6 @@ class EZClientStreamConn;
 class EZTLSEngine;
 class EZTLSContext;
 
-enum class EZResult {
-    NONE = 0,           // nothing sent yet / request in progress
-    OK,                 // a valid response was received (see GetResponseType())
-    TIMEOUT,            // no valid response after RetryCount attempts
-    DNS_FAILED,         // the host name could not be resolved
-    SEND_FAILED,        // socket error
-    CANCELED            // Cancel() was called
-};
 
 // Asynchronous RADIUS client on a netRector reactor: no threads, nothing blocks.
 //
@@ -50,7 +44,7 @@ enum class EZResult {
 // - a fresh UDP socket (random source port) is used for every request
 // - the response is accepted only when ID and Response Authenticator are valid (and the
 //   Message-Authenticator, when present / required)
-class EZRadiusClient
+class EZRadiusClient : private EZConnectionRequest
 {
 public:
     typedef std::function<void(EZRadiusClient &client, EZResult result)> Callback;
@@ -130,6 +124,14 @@ private:
     std::shared_ptr<EZTLSContext> m_tlsCtx;
     bool m_radius11 = false;                    // the connection speaks RADIUS/1.1 (RFC 9765)
     bool m_negotiated11 = false;
+    // connection pool (EZClientSettings::Pool): the pool sends, retransmits and reconnects for us
+    std::shared_ptr<EZRadiusPool> m_pool;
+    bool m_pooled = false;
+    bool connPrepare(uint8_t id) override;
+    const uint8_t *connPacket(size_t &len) override;
+    bool connAccept(const uint8_t *packet, size_t len, bool radius11) override;
+    void connFinished(EZResult result) override;
+    bool acceptResponse(const uint8_t *data, size_t len);
     bool sendRequest();
     bool flushTls();
     int m_timerId = -1;

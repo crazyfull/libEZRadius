@@ -2,8 +2,10 @@
 #include "clsEpollReactor.h"
 
 EZRadiusSyncClient::EZRadiusSyncClient(const EZClientSettings &Settings)
-    : m_reactor(new netrector::EpollReactor(0, 16)), m_client(new EZRadiusClient(m_reactor.get(), Settings)), m_settings(Settings)
+    : m_reactor(new netrector::EpollReactor(0, 16)), m_settings(Settings)
 {
+    m_settings.Pool.reset();            // a pool belongs to another reactor: the blocking client has its own
+    m_client.reset(new EZRadiusClient(m_reactor.get(), m_settings));
 }
 
 EZRadiusSyncClient::~EZRadiusSyncClient()

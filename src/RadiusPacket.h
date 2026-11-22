@@ -76,8 +76,9 @@ public:
     RadiusPacket(const char* Data, int DataLength, unsigned char p_code = 0);
     RadiusPacket(unsigned char p_code, RadiusPacket & p_request);
     RadiusPacket(unsigned char p_code = 0);
-    RadiusPacket(const RadiusPacket & p_packet) = default;
-    RadiusPacket & operator=(const RadiusPacket & p_packet) = default;
+    // copies only the used part of the buffer (the rest is not specified, see resetBody)
+    RadiusPacket(const RadiusPacket & p_packet);
+    RadiusPacket & operator=(const RadiusPacket & p_packet);
 
     /// Destructor (wipes the plain text passwords kept in the packet)
     ~RadiusPacket();
@@ -210,6 +211,10 @@ private:
 
     /// Set packet's length
     void setLength(uint16_t p_length);
+
+    /// number of bytes of m_data that carry (or may carry) packet data: length + room for an attribute being built
+    size_t usedBytes();
+    void copyFrom(const RadiusPacket & p_packet);
 
     /// Raw packet data
     unsigned char m_data[D_RAW_DATA_LENGTH+1];

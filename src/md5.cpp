@@ -267,6 +267,10 @@ void MD5Transform(uint32_t buf[4], uint32_t in[16])
  */
 void MD5Calc(unsigned char *output, const unsigned char *input, uint32_t len)
 {
+#ifdef EZRADIUS_HAS_CRYPTO
+    if (EZ_MD5_Fast(output, input, len))
+        return;
+#endif
     MD5Context context;
     MD5Init(&context);
     MD5Update(&context, input, len);
@@ -280,6 +284,10 @@ void MD5Calc(unsigned char *output, const unsigned char *input, uint32_t len)
 void HMAC_MD5(unsigned char output[16], const unsigned char *key, uint32_t keyLen,
               const unsigned char *data, uint32_t dataLen)
 {
+#ifdef EZRADIUS_HAS_CRYPTO
+    if (EZ_HMAC_MD5_Fast(output, key, keyLen, data, dataLen))
+        return;
+#endif
     unsigned char k[64];
     unsigned char ipad[64], opad[64];
     unsigned char inner[16];

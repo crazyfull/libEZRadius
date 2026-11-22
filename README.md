@@ -76,6 +76,17 @@ The asynchronous API is designed to be driven by an existing reactor. `EZRadiusS
 - **DTLS server:** one DTLS session per peer address and port, one RADIUS packet per record, retransmission timers, partial-handshake and session limits, idle timeout. Packets up to 4096 bytes are supported.
 - **RADIUS/1.1 (RFC 9765):** on TLS 1.3 the ALPN protocols `radius/1.0` and `radius/1.1` are negotiated (default offer: both). RADIUS/1.1 replaces the Identifier and the authenticators with a 4-byte Token and sends User-Password and MPPE keys as plain strings inside the tunnel; there is no Message-Authenticator. The library converts at the transport boundary, so request handling, `EZResponse`, MS-CHAP and EAP work unchanged. Servers set `radiusVersions` to `"1.0"` to disable it. A client that offers only `"1.1"` fails against servers that do not support it.
 
+### Connection pool
+
+`EZRadiusPool` (`EZRadiusPool.h`) lets many `EZRadiusClient` objects share a few long-lived sockets or connections instead of opening one per request. It is optional: without `EZClientSettings::Pool` every client behaves as before.
+
+- **UDP:** one socket per pool connection; requests are told apart by the RADIUS Identifier (up to 256 in flight per connection); retransmission uses the same Identifier. No socket is created per request.
+- **TCP / TLS / DTLS:** the connection (and the TLS / DTLS session) is opened on the first request and kept. A lost connection is re-established in the background (first retry after 0.5 s, doubling up to 30 s, see `setReconnectDelay`); requests that were in flight are sent again once it is back, up to `RetryCount` sends in total. Destroying a client object does not close the connection.
+- **Watchdog:** an idle TCP / TLS / DTLS connection is probed with Status-Server (RFC 5997, `setKeepAlive`, default 30 s); no answer closes the connection and reconnects. A request that times out on a live connection triggers a probe too.
+- **Several connections:** `setConnections(n)` opens `n` connections per port; the least loaded one is used.
+- **Statistics:** `inFlight()`, `connectedCount()`, `reconnects()`, `requestsSent()`.
+- The pool and its clients run on one reactor thread. A connection only lives while its reactor runs, so the blocking `EZRadiusSyncClient` ignores `Pool` (it has a private reactor that is stopped between calls).
+
 ### Vendor-specific attributes (modular dictionary)
 
 - `EZVendorRegistry` (`EZVendorDict.h`): a data-driven registry of vendors and vendor attributes. Adding a vendor needs no change to the core.
@@ -412,7 +423,29 @@ EZRadiusSyncClient client(s);                              // or EZRadiusClient 
 
 Instead of a CA you can pin certificates: `tls.verifyPeer = false; tls.pinnedSHA256 = {"<sha256 hex of the peer certificate>"};`. In the request callback `from.isRadius11()` tells whether the connection speaks RADIUS/1.1; `client.UsedRadius11()` reports it on the client.
 
-An async `EZRadiusClient` keeps its TCP / TLS connection open for the following requests of the same object (`ReuseConnection`, default on). The blocking `EZRadiusSyncClient` runs a private reactor only while `Send()` waits, which closes the sockets afterwards, so it uses a new connection (and TLS handshake) for every `Send()`. DTLS always uses one session per request.
+Without a pool, an async `EZRadiusClient` keeps its TCP / TLS connection open for the following requests of the same object (`ReuseConnection`, default on). The blocking `EZRadiusSyncClient` runs a private reactor only while `Send()` waits, which closes the sockets afterwards, so it uses a new connection (and TLS handshake) for every `Send()`. Without a pool DTLS uses one session per request (it is closed with close_notify when the request is done).
+
+#### Connection pool (shared, persistent connections)
+
+```cpp
+EZClientSettings s;
+s.Host = "radius.example.net";
+s.Transport = EZTransport::TLS;                            // UDP, TCP, TLS or DTLS
+s.TLS = tlsConfig;                                         // see above
+
+auto pool = EZRadiusPool::create(&reactor, s);             // nullptr: invalid settings (e.g. bad TLS config)
+pool->setConnections(2);                                   // optional: 2 connections share the load
+pool->setKeepAlive(30000);                                 // Status-Server probe after 30 s of silence
+pool->connect();                                           // optional: connect now instead of with the first request
+s.Pool = pool;
+
+EZRadiusClient c(&reactor, s);                             // lightweight: create one per request
+c.AddAttribute(USER_NAME, "user");
+c.AddAttribute(USER_PASSWORD, "pass");
+c.Send(C_ACCESS_REQUEST, [](EZRadiusClient &c, EZResult r){ /* ... */ });
+```
+
+`Send()` returns `false` when the pool has no free Identifier (256 requests already in flight on every connection): add connections or queue in the application. Destroy the pool (or call `pool->close()`, which finishes pending requests with `EZResult::CANCELED`) before the reactor.
 
 ### Vendor-specific attributes
 
@@ -511,6 +544,7 @@ More complete programs are available in [`example/`](example/), including server
 | `EZClientSettings` | Host, shared secret, Authentication / Accounting / CoA ports, timeout, retry count, NAS/RAS addresses, Message-Authenticator options |
 | `EZRadiusClient` | Asynchronous client: `AddAttribute`, `AddVendorAttribute`, `AddMSCHAPv1/v2`, `Send`, `Cancel`, `Reset`, response getters, MS-CHAPv2 verification, MPPE key retrieval |
 | `EZRadiusSyncClient` | Blocking client wrapper; `Send(type)` returns an `EZResult` |
+| `EZRadiusPool` | Shared sockets / persistent connections for many `EZRadiusClient` objects (UDP, TCP, TLS, DTLS): Identifier multiplexing, auto-reconnect, Status-Server watchdog |
 | `EZRadiusServer` | UDP Authentication and Accounting server; NAS list, request callback, start/stop, bind and port configuration, Message-Authenticator and duplicate-detection settings |
 | `EZRASList` / `RASItem` | Allowed NAS addresses and shared secrets |
 | `EZRadiusClientIdentify` | Request origin information passed to the server callback and response sender |
@@ -640,7 +674,16 @@ With BoringSSL enabled, the library supports the MS-CHAP and MPPE attributes use
 
 ## Testing
 
-The repository includes tests for packet parsing, malformed packets, PAP and authenticator vectors, Message-Authenticator, VSA, loopback client/server behavior, Accounting, CoA, Status-Server, IPv6, timeout/cancel behavior, MS-CHAPv1/v2, MPPE key derivation, the vendor dictionary (built-in and run-time vendors), and EAP-MD5 / EAP-TLS conversations (with fragmentation, Nak, rejected certificates), RADIUS over TCP (framing, connection reuse, invalid lengths), RadSec (mutual TLS, name checks, pinning, untrusted CAs, IP filter), DTLS (handshake, 3 kB packets, refused peers), and RADIUS/1.1 (wire conversion, ALPN negotiation matrix, EAP over RADIUS/1.1, random-input robustness). A libFuzzer target is available for packet-parser fuzzing.
+The repository includes tests for packet parsing, malformed packets, PAP and authenticator vectors, Message-Authenticator, VSA, loopback client/server behavior, Accounting, CoA, Status-Server, IPv6, timeout/cancel behavior, MS-CHAPv1/v2, MPPE key derivation, the vendor dictionary (built-in and run-time vendors), and EAP-MD5 / EAP-TLS conversations (with fragmentation, Nak, rejected certificates), RADIUS over TCP (framing, connection reuse, invalid lengths), RadSec (mutual TLS, name checks, pinning, untrusted CAs, IP filter), DTLS (handshake, 3 kB packets, refused peers), and RADIUS/1.1 (wire conversion, ALPN negotiation matrix, EAP over RADIUS/1.1, random-input robustness), and the connection pool (shared UDP / TCP / TLS / DTLS connections, 256-request limit, cancel and destroy while in flight, reconnect after a server restart, watchdog against a silent peer). `bench_transport` (not part of ctest) measures throughput: `bench_transport <udp|tcp|tls|dtls>[-pool] [workers] [seconds]`. A libFuzzer target is available for packet-parser fuzzing.
+
+Indicative throughput of `bench_transport` (Release, 2 vCPU VM, loopback, server and client on separate threads, 32 requests in flight, PAP Access-Request; your numbers will differ):
+
+| Transport | Without pool | With `EZRadiusPool` |
+|---|---|---|
+| UDP | ~51k req/s | ~135k req/s |
+| TCP | ~74k req/s | ~112k req/s |
+| TLS (RadSec) | ~57k req/s | ~90k req/s |
+| DTLS | ~3k req/s (handshake per request) | ~85k req/s |
 
 ```sh
 cmake -S . -B build -DEZRADIUS_SANITIZE=ON
@@ -656,11 +699,12 @@ To build the libFuzzer target, enable `EZRADIUS_BUILD_FUZZER` and use Clang.
 
 - Linux only (epoll through netRector).
 - EAP: only EAP-MD5 and EAP-TLS (TLS 1.2). PEAP, EAP-TTLS, EAP-TLS with TLS 1.3, session resumption and CRL / OCSP checks are not implemented.
-- TCP / TLS / DTLS: no Status-Server watchdog and no multi-server failover on a connection, no TLS-PSK, no dynamic peer discovery (RFC 7585), no connection pool (one connection per client object), no DTLS session reuse between requests. DTLS is DTLS 1.2 only. RADIUS/1.1 does not convert Tunnel-Password and does not implement Protocol-Error / Original-Packet-Code handling.
+- TCP / TLS / DTLS: no multi-server failover (a pool talks to one server), no TLS-PSK, no dynamic peer discovery (RFC 7585). Without a pool each client object has its own connection and DTLS uses one session per request. The pool does not queue: `Send()` fails when all Identifiers are in use. DTLS is DTLS 1.2 only. RADIUS/1.1 does not convert Tunnel-Password and does not implement Protocol-Error / Original-Packet-Code handling.
 - The dictionary covers vendor-specific attributes only; standard attributes (RFC 2865 etc.) use the compiled-in table. Dictionary `tlv` / `struct` / extended types are not supported.
 - Extended attributes (RFC 6929), Tunnel-Password decryption, and the IPv6 attribute set (RFC 3162 / RFC 4818) beyond NAS-IPv6-Address are not decoded.
 - MS-CHAPv1 supports the NT response only; the LM response is not supported. MPPE keys are derived for MS-CHAPv2.
-- One request at a time per client object.
+- One request at a time per client object (use a pool and several client objects for concurrency).
+- The blocking `EZRadiusSyncClient` cannot use a pool or reuse connections.
 - Server duplicate detection and the NAS list are per-process and in memory.
 - The server runs on one reactor. To use multiple cores, run one reactor per thread; `SO_REUSEPORT` multi-reactor binding is not currently wired up.
 

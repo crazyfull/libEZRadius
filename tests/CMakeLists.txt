@@ -26,6 +26,10 @@ add_executable(test_transport test_transport.cpp)
 target_link_libraries(test_transport PRIVATE EZRadius)
 add_test(NAME transport COMMAND test_transport)
 
+add_executable(test_pool test_pool.cpp)
+target_link_libraries(test_pool PRIVATE EZRadius)
+add_test(NAME pool COMMAND test_pool)
+
 if(EZRADIUS_HAS_TLS)
     add_executable(test_radsec test_radsec.cpp)
     target_link_libraries(test_radsec PRIVATE EZRadius)
@@ -37,3 +41,7 @@ if(EZRADIUS_HAS_TLS)
     target_link_libraries(test_radius11 PRIVATE EZRadius)
     add_test(NAME radius11 COMMAND test_radius11)
 endif()
+
+# throughput benchmark (not part of ctest): build/tests/bench_transport <udp|tcp|tls|dtls>[-pool] [workers] [seconds]
+add_executable(bench_transport bench_transport.cpp)
+target_link_libraries(bench_transport PRIVATE EZRadius)

@@ -10,9 +10,12 @@
 
 #ifndef EZCLIENTSETTINGS_H
 #define EZCLIENTSETTINGS_H
+#include <memory>
 #include <string>
 #include "EZTransport.h"
 #include "EZTLS.h"
+
+class EZRadiusPool;
 
 class EZClientSettings
 {
@@ -42,6 +45,10 @@ public:
     // TLS / DTLS settings (certificates, trust, server name, RADIUS/1.1 negotiation): see EZTLS.h
     EZTLSConfig TLS;
 #endif
+
+    // Optional connection pool (see EZRadiusPool.h): the client then sends its requests through the pool's
+    // shared sockets / connections. Host, Secret, Transport and TLS of the pool are used instead of the ones here.
+    std::shared_ptr<EZRadiusPool> Pool;
 
     // RADIUS server (IPv4 address or host name; names are resolved asynchronously)
     std::string Host;
